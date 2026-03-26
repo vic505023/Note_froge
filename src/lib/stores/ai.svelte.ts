@@ -4,8 +4,10 @@ import type { ChatMessage } from '../types';
 
 interface Source {
   filename: string;
+  filepath: string;  // Full path to the document file
   relevance: number;
-  page?: number;  // Optional page/slide number
+  pages?: number[];  // Optional pages/slides used from this document
+  file_type?: string;  // Document type (pdf, pptx, docx, txt)
 }
 
 class AIStore {
@@ -208,7 +210,7 @@ class AIStore {
   async confirmEdit(notePath: string | null) {
     const assistantMessage: ChatMessage = {
       role: 'assistant',
-      content: `✏️ **Edited note**\n\nI've updated the note based on your request.`
+      content: `**Edited note**\n\nI've updated the note based on your request.`
     };
 
     this.messages = [...this.messages, assistantMessage];

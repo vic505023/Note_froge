@@ -338,32 +338,66 @@
     align-items: center;
     gap: 8px;
     width: 100%;
-    padding: 6px 12px;
+    padding: 5px 10px;
+    margin: 1px 8px;
+    width: calc(100% - 16px);
     text-align: left;
     background: transparent;
     color: var(--text-secondary);
-    border: none;
-    border-left: 2px solid transparent;
+    border: 1px solid transparent;
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: all 0.18s cubic-bezier(0.25, 0.46, 0.45, 0.94);
     font-size: 13px;
-    line-height: 1.4;
+    line-height: 1.5;
+    font-weight: 400;
+    border-radius: 8px;
   }
 
-  .file-button:hover {
-    background: var(--bg-hover);
+  .file-button:hover:not(.active) {
+    background: rgba(255, 255, 255, 0.04);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.06);
     color: var(--text-primary);
   }
 
   .file-button.active {
-    background: var(--bg-hover);
-    color: var(--accent);
-    border-left-color: var(--accent);
+    /* Refined gradient - lighter on top, darker on bottom */
+    background: linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.09) 0%,
+      rgba(255, 255, 255, 0.06) 100%
+    );
+
+    /* Apple-style backdrop blur */
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+
+    /* Almost invisible border */
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 8px;
+
+    /* Very soft, barely visible shadows */
+    box-shadow:
+      0 0.5px 2px rgba(0, 0, 0, 0.03),
+      0 1px 3px rgba(0, 0, 0, 0.04),
+      inset 0 0.5px 0 rgba(255, 255, 255, 0.12);
+
+    /* Text styling - clean, not too bold */
+    color: rgba(255, 255, 255, 0.95);
+    font-weight: 500;
+
+    /* Minimal elevation */
+    transform: translateX(1px);
   }
 
   .file-button.is-directory {
-    font-weight: 500;
+    font-weight: 450;
     color: var(--text-primary);
+  }
+
+  .file-button.is-directory.active {
+    font-weight: 500;
   }
 
   .name {
@@ -375,8 +409,11 @@
 
   /* Drag & Drop styles */
   .file-button.drop-target {
-    background: var(--bg-hover);
-    border-left: 2px solid var(--accent);
+    background: rgba(122, 162, 247, 0.12);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(122, 162, 247, 0.3);
+    box-shadow: 0 2px 8px rgba(122, 162, 247, 0.2);
   }
 
   .file-tree.drop-target-root {

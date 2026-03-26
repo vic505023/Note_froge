@@ -80,7 +80,7 @@ pub async fn ai_chat(
 
                     let stmt = db
                         .prepare(
-                            "SELECT e.id, e.source_id, e.chunk_text, e.vector, e.page, d.filename
+                            "SELECT e.id, e.source_id, e.chunk_text, e.vector, e.page, d.filename, d.file_type
                              FROM embeddings e
                              INNER JOIN documents d ON d.filepath = e.source_id
                              INNER JOIN notebook_documents nd ON nd.document_id = d.id
@@ -89,7 +89,7 @@ pub async fn ai_chat(
                         .ok();
 
                     if let Some(mut stmt) = stmt {
-                        let doc_embeddings: Vec<(i64, String, String, Vec<f32>, Option<i64>, String)> = stmt
+                        let doc_embeddings: Vec<(i64, String, String, Vec<f32>, Option<i64>, String, String)> = stmt
                             .query_map([&notebook], |row| {
                                 let id: i64 = row.get(0)?;
                                 let source_id: String = row.get(1)?;
@@ -97,8 +97,9 @@ pub async fn ai_chat(
                                 let blob: Vec<u8> = row.get(3)?;
                                 let page: Option<i64> = row.get(4)?;
                                 let filename: String = row.get(5)?;
+                                let file_type: String = row.get(6)?;
                                 let vec = blob_to_vec(&blob);
-                                Ok((id, source_id, chunk_text, vec, page, filename))
+                                Ok((id, source_id, chunk_text, vec, page, filename, file_type))
                             })
                             .ok()
                             .map(|rows| rows.filter_map(Result::ok).collect())
@@ -111,7 +112,7 @@ pub async fn ai_chat(
                             let embeddings_for_search: Vec<(i64, String, String, Vec<f32>, Option<i64>)> =
                                 doc_embeddings
                                     .iter()
-                                    .map(|(id, sid, text, vec, page, _)| {
+                                    .map(|(id, sid, text, vec, page, _, _)| {
                                         (*id, sid.clone(), text.clone(), vec.clone(), *page)
                                     })
                                     .collect();
@@ -128,37 +129,47 @@ pub async fn ai_chat(
                                 eprintln!("No sources above 30% relevance threshold found");
                             }
 
-                            // Build sources map for emission
-                            let mut sources_map: HashMap<String, (f32, String, Option<i64>)> = HashMap::new();
+                            // Build sources map for emission - collect ALL pages used
+                            let mut sources_map: HashMap<String, (f32, String, Vec<i64>, String)> = HashMap::new();
                             for (_, source_id, _, score, page) in &top_chunks {
-                                // Find filename for this source_id
-                                if let Some((_, _, _, _, _, filename)) = doc_embeddings
+                                // Find filename and file_type for this source_id
+                                if let Some((_, _, _, _, _, filename, file_type)) = doc_embeddings
                                     .iter()
-                                    .find(|(_, sid, _, _, _, _)| sid == source_id)
+                                    .find(|(_, sid, _, _, _, _, _)| sid == source_id)
                                 {
                                     sources_map
                                         .entry(filename.clone())
-                                        .and_modify(|(s, _, p)| {
-                                            *s = s.max(*score);
-                                            // Keep the highest scoring chunk's page
-                                            if score > s {
-                                                *p = *page;
+                                        .and_modify(|(s, _, pages, _)| {
+                                            // Keep max score
+                                            if *score > *s {
+                                                *s = *score;
+                                            }
+                                            // Add page if not already present
+                                            if let Some(p) = page {
+                                                if !pages.contains(p) {
+                                                    pages.push(*p);
+                                                }
                                             }
                                         })
-                                        .or_insert((*score, source_id.clone(), *page));
+                                        .or_insert((*score, source_id.clone(), page.map_or(vec![], |p| vec![p]), file_type.clone()));
                                 }
                             }
 
                             // Emit sources
                             let sources: Vec<serde_json::Value> = sources_map
                                 .iter()
-                                .map(|(filename, (relevance, _, page))| {
+                                .map(|(filename, (relevance, filepath, pages, file_type))| {
                                     let mut source = serde_json::json!({
                                         "filename": filename,
+                                        "filepath": filepath,
                                         "relevance": (relevance * 100.0) as u32,
+                                        "file_type": file_type,
                                     });
-                                    if let Some(p) = page {
-                                        source["page"] = serde_json::json!(p);
+                                    if !pages.is_empty() {
+                                        // Sort pages in ascending order
+                                        let mut sorted_pages = pages.clone();
+                                        sorted_pages.sort();
+                                        source["pages"] = serde_json::json!(sorted_pages);
                                     }
                                     source
                                 })
@@ -172,9 +183,9 @@ pub async fn ai_chat(
                             // Build context from top chunks
                             let mut chunks_by_file: HashMap<String, Vec<(String, Option<i64>)>> = HashMap::new();
                             for (_, source_id, chunk_text, _, page) in &top_chunks {
-                                if let Some((_, _, _, _, _, filename)) = doc_embeddings
+                                if let Some((_, _, _, _, _, filename, _)) = doc_embeddings
                                     .iter()
-                                    .find(|(_, sid, _, _, _, _)| sid == source_id)
+                                    .find(|(_, sid, _, _, _, _, _)| sid == source_id)
                                 {
                                     chunks_by_file
                                         .entry(filename.clone())
@@ -493,7 +504,7 @@ pub async fn ai_edit_note(
 
                 let stmt = db
                     .prepare(
-                        "SELECT e.id, e.source_id, e.chunk_text, e.vector, e.page, d.filename
+                        "SELECT e.id, e.source_id, e.chunk_text, e.vector, e.page, d.filename, d.file_type
                          FROM embeddings e
                          INNER JOIN documents d ON d.filepath = e.source_id
                          INNER JOIN notebook_documents nd ON nd.document_id = d.id
@@ -502,7 +513,7 @@ pub async fn ai_edit_note(
                     .ok();
 
                 if let Some(mut stmt) = stmt {
-                    let doc_embeddings: Vec<(i64, String, String, Vec<f32>, Option<i64>, String)> = stmt
+                    let doc_embeddings: Vec<(i64, String, String, Vec<f32>, Option<i64>, String, String)> = stmt
                         .query_map([&notebook], |row| {
                             let id: i64 = row.get(0)?;
                             let source_id: String = row.get(1)?;
@@ -510,8 +521,9 @@ pub async fn ai_edit_note(
                             let blob: Vec<u8> = row.get(3)?;
                             let page: Option<i64> = row.get(4)?;
                             let filename: String = row.get(5)?;
+                            let file_type: String = row.get(6)?;
                             let vec = blob_to_vec(&blob);
-                            Ok((id, source_id, chunk_text, vec, page, filename))
+                            Ok((id, source_id, chunk_text, vec, page, filename, file_type))
                         })
                         .ok()
                         .map(|rows| rows.filter_map(Result::ok).collect())
@@ -524,7 +536,7 @@ pub async fn ai_edit_note(
                         let embeddings_for_search: Vec<(i64, String, String, Vec<f32>, Option<i64>)> =
                             doc_embeddings
                                 .iter()
-                                .map(|(id, sid, text, vec, page, _)| {
+                                .map(|(id, sid, text, vec, page, _, _)| {
                                     (*id, sid.clone(), text.clone(), vec.clone(), *page)
                                 })
                                 .collect();
@@ -543,9 +555,9 @@ pub async fn ai_edit_note(
                         // Build context from top chunks
                         let mut chunks_by_file: HashMap<String, Vec<(String, Option<i64>)>> = HashMap::new();
                         for (_, source_id, chunk_text, _, page) in &top_chunks {
-                            if let Some((_, _, _, _, _, filename)) = doc_embeddings
+                            if let Some((_, _, _, _, _, filename, _)) = doc_embeddings
                                 .iter()
-                                .find(|(_, sid, _, _, _, _)| sid == source_id)
+                                .find(|(_, sid, _, _, _, _, _)| sid == source_id)
                             {
                                 chunks_by_file
                                     .entry(filename.clone())

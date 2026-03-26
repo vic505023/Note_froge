@@ -75,6 +75,7 @@ export interface UIConfig {
   ai_panel_width: number;
   ai_panel_open: boolean;
   sidebar_open: boolean;
+  selected_model: string | null;
 }
 
 export interface ChatMessage {

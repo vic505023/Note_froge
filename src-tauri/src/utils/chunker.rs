@@ -173,6 +173,8 @@ pub fn chunk_text(text: &str, chunk_size: usize, overlap: usize) -> Vec<TextChun
 /// Each chunk remembers which page it came from. If a chunk spans multiple pages,
 /// it's assigned to the page where it starts.
 pub fn chunk_pages(pages: &[PagedText], chunk_size: usize, overlap: usize) -> Vec<TextChunk> {
+    eprintln!("Chunking {} pages, chunk_size={}, overlap={}", pages.len(), chunk_size, overlap);
+
     let mut chunks = Vec::new();
     let mut chunk_index = 0;
     let mut current_page_num = 1;
@@ -233,6 +235,11 @@ pub fn chunk_pages(pages: &[PagedText], chunk_size: usize, overlap: usize) -> Ve
             text: accumulated_text,
             page: Some(accumulated_start_page),
         });
+    }
+
+    eprintln!("Created {} chunks:", chunks.len());
+    for chunk in &chunks {
+        eprintln!("  Chunk {}: page={:?}, len={}", chunk.index, chunk.page, chunk.text.len());
     }
 
     chunks

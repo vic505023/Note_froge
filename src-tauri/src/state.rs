@@ -113,6 +113,8 @@ pub struct UIConfig {
     pub ai_panel_open: bool,
     #[serde(default = "default_true")]
     pub sidebar_open: bool,
+    #[serde(default)]
+    pub selected_model: Option<String>,
 }
 
 fn default_base_url() -> String {
@@ -187,6 +189,7 @@ impl Default for AppConfig {
                 ai_panel_width: default_ai_panel_width(),
                 ai_panel_open: true,
                 sidebar_open: true,
+                selected_model: None,
             },
         }
     }

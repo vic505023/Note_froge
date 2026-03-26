@@ -604,7 +604,6 @@
     right: 0;
     bottom: 0;
     background: rgba(0, 0, 0, 0.6);
-    backdrop-filter: blur(4px);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -620,7 +619,9 @@
   .settings-modal {
     width: 600px;
     max-height: 80vh;
-    background: var(--bg-elevated);
+    background: rgba(26, 27, 38, 0.7);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
     border-radius: 8px;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
     display: flex;

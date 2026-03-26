@@ -90,11 +90,12 @@
     align-items: center;
     justify-content: center;
     z-index: 1000;
-    backdrop-filter: blur(2px);
   }
 
   .modal-content {
-    background: var(--bg-elevated);
+    background: rgba(26, 27, 38, 0.7);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
     border: 1px solid var(--border);
     border-radius: 8px;
     padding: 24px;

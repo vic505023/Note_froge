@@ -120,7 +120,9 @@
     </div>
     {#if messages.length > 0}
       <button class="clear-btn" onclick={clearHistory} title="Clear history">
-        🗑
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+          <path d="M3 4H13M5 4V3C5 2.44772 5.44772 2 6 2H10C10.5523 2 11 2.44772 11 3V4M6 7V11M10 7V11M4 4L4.5 13C4.5 13.5523 4.94772 14 5.5 14H10.5C11.0523 14 11.5 13.5523 11.5 13L12 4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
       </button>
     {/if}
   </div>
@@ -128,7 +130,12 @@
   <div class="messages-container">
     {#if messages.length === 0 && !currentResponse}
       <div class="empty-state">
-        <div class="empty-icon">🔍</div>
+        <div class="empty-icon">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none">
+            <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.5"/>
+            <path d="M16 16L21 21" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+        </div>
         <div class="empty-title">Search your notes</div>
         <div class="empty-text">
           Ask questions about your notes.<br />
@@ -145,7 +152,12 @@
 
         {#if message.role === 'assistant' && sources.length > 0 && index === messages.length - 1}
           <div class="sources-section">
-            <div class="sources-title">📎 Sources:</div>
+            <div class="sources-title">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="display: inline-block; vertical-align: middle; margin-right: 4px;">
+                <path d="M7.5 4.5L10.5 1.5C11.328 0.672 12.672 0.672 13.5 1.5C14.328 2.328 14.328 3.672 13.5 4.5L10.5 7.5M7.5 4.5L4.5 7.5M7.5 4.5L8.5 5.5M4.5 7.5L1.5 10.5C0.672 11.328 0.672 12.672 1.5 13.5C2.328 14.328 3.672 14.328 4.5 13.5L7.5 10.5M4.5 7.5L5.5 8.5M8.5 5.5L5.5 8.5M8.5 5.5L10.5 7.5M5.5 8.5L7.5 10.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              Sources:
+            </div>
             <div class="sources-list">
               {#each sources as source}
                 <button class="source-item" onclick={() => openNote(source.path)}>
@@ -190,7 +202,17 @@
       disabled={!query.trim() || isSearching}
       title="Search (Enter)"
     >
-      {isSearching ? '⏳' : '🔍'}
+      {#if isSearching}
+        <svg class="search-icon spinning" width="16" height="16" viewBox="0 0 16 16" fill="none">
+          <circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="2" opacity="0.25"/>
+          <path d="M 8 2 A 6 6 0 0 1 14 8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      {:else}
+        <svg class="search-icon" width="16" height="16" viewBox="0 0 16 16" fill="none">
+          <circle cx="7" cy="7" r="5" stroke="currentColor" stroke-width="1.5"/>
+          <path d="M11 11L14 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+      {/if}
     </button>
   </div>
 </div>
@@ -281,9 +303,9 @@
   }
 
   .empty-icon {
-    font-size: 64px;
     margin-bottom: 16px;
-    opacity: 0.5;
+    opacity: 0.3;
+    color: var(--text-muted);
   }
 
   .empty-title {
@@ -423,6 +445,19 @@
   .search-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+  }
+
+  .search-icon {
+    display: block;
+  }
+
+  .search-icon.spinning {
+    animation: spin 1s linear infinite;
+  }
+
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
   }
 
   .chat-message {

@@ -165,6 +165,7 @@ pub fn run() {
             document_delete,
             document_add_to_notebook,
             document_remove_from_notebook,
+            open_document,
             get_indexing_stats,
             index_all_notes_embeddings,
             fts_search,

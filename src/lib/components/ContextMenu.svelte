@@ -103,7 +103,9 @@
 <style>
   .context-menu {
     position: fixed;
-    background: var(--bg-elevated);
+    background: rgba(26, 27, 38, 0.7);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     padding: 4px;

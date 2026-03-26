@@ -66,73 +66,8 @@ pub async fn document_upload(
         .ok_or("Invalid filename")?
         .to_string();
 
-    // Emit parsing start event immediately
-    let _ = app_handle.emit(
-        "document-parsing-start",
-        serde_json::json!({ "filename": original_filename }),
-    );
-
-    // Parse document to get title and page count (with vision OCR support)
-    let source_path_for_parsing = source_path.clone();
-    let state_for_parsing = state.inner().clone();
-
-    eprintln!("========================================");
-    eprintln!("DOCUMENT UPLOAD: Starting to parse {}", source_path);
-
-    let parsed = tokio::task::spawn_blocking(move || {
-        let source = Path::new(&source_path_for_parsing);
-        let client = reqwest::Client::new();
-        let (vision_config, vision_base_url, vision_api_key) = {
-            let cfg = state_for_parsing.config.read().unwrap();
-            (
-                cfg.vision.clone(),
-                cfg.get_vision_base_url(),
-                cfg.get_vision_api_key(),
-            )
-        };
-
-        eprintln!("Vision enabled: {}", vision_config.enabled);
-        eprintln!("Vision API key present: {}", !vision_api_key.is_empty());
-        eprintln!("Vision base URL: {}", vision_base_url);
-        eprintln!("Vision model: {}", vision_config.model);
-
-        let runtime = tokio::runtime::Handle::current();
-
-        if vision_config.enabled && !vision_api_key.is_empty() {
-            eprintln!("Using Vision OCR for parsing");
-            runtime.block_on(parse_document_with_vision(
-                source,
-                &client,
-                true,
-                &vision_base_url,
-                &vision_api_key,
-                &vision_config.model,
-            ))
-        } else {
-            eprintln!("Vision OCR disabled or no API key, using regular parsing");
-            // Fall back to regular parsing (may fail on scanned PDFs)
-            parse_document(source).map_err(|e| {
-                // If it's a scanned PDF and vision is disabled, provide helpful message
-                if e.contains("Scanned PDF") {
-                    format!("{} Enable Vision OCR in Settings to process scanned documents.", e)
-                } else {
-                    e
-                }
-            })
-        }
-    })
-    .await
-    .map_err(|e| format!("Parsing task failed: {}", e))??;
-
-    eprintln!("Parsing successful! Title: {}", parsed.title);
-    eprintln!("========================================");
-
     // Generate unique filename
     let uuid = Uuid::new_v4();
-    let original_filename = source
-        .file_name()
-        .and_then(|s| s.to_str())
-        .ok_or("Invalid filename")?;
     let unique_filename = format!("{}_{}", uuid.as_simple(), original_filename);
 
     // Copy to documents directory
@@ -152,8 +87,9 @@ pub async fn document_upload(
     let metadata = fs::metadata(&dest_path).map_err(|e| format!("Failed to get file metadata: {}", e))?;
     let size_bytes = metadata.len() as i64;
 
-    // Insert into database
+    // Insert into database with temporary title (will be updated after parsing)
     let now = chrono::Utc::now().timestamp();
+    let temp_title = original_filename.clone();
 
     let db = state.db.lock().map_err(|e| format!("DB lock error: {}", e))?;
 
@@ -166,8 +102,8 @@ pub async fn document_upload(
                 original_filename,
                 dest_path_str,
                 file_type,
-                parsed.title,
-                parsed.page_count,
+                temp_title,
+                None::<u32>,  // Will be set after parsing
                 size_bytes,
                 now,
             ],
@@ -189,26 +125,95 @@ pub async fn document_upload(
         filename: original_filename.to_string(),
         filepath: dest_path_str.clone(),
         file_type: file_type.to_string(),
-        title: parsed.title.clone(),
-        page_count: parsed.page_count,
+        title: temp_title.clone(),
+        page_count: None,
         size_bytes,
         indexed_at: None,
         created_at: now,
     };
 
-    // Emit indexing start event
-    let _ = app_handle.emit(
-        "document-indexing-start",
-        serde_json::json!({ "id": document_id, "filename": original_filename }),
-    );
-
-    // Start background indexing
+    // Start background parsing + indexing
     let state_clone = state.inner().clone();
     let app_handle_clone = app_handle.clone();
     let dest_path_clone = dest_path_str.clone();
 
     tokio::spawn(async move {
-        // Get AI config and vision config
+        eprintln!("========================================");
+        eprintln!("Background task: Parsing and indexing {}", dest_path_clone);
+
+        // Step 1: Parse document (may use Vision OCR - slow!)
+        let source_path_for_parsing = dest_path_clone.clone();
+        let state_for_parsing = state_clone.clone();
+
+        let parsed = tokio::task::spawn_blocking(move || {
+            let source = Path::new(&source_path_for_parsing);
+            let client = reqwest::Client::new();
+            let (vision_config, vision_base_url, vision_api_key) = {
+                let cfg = state_for_parsing.config.read().unwrap();
+                (
+                    cfg.vision.clone(),
+                    cfg.get_vision_base_url(),
+                    cfg.get_vision_api_key(),
+                )
+            };
+
+            let runtime = tokio::runtime::Handle::current();
+
+            if vision_config.enabled && !vision_api_key.is_empty() {
+                eprintln!("Using Vision OCR for parsing");
+                runtime.block_on(parse_document_with_vision(
+                    source,
+                    &client,
+                    true,
+                    &vision_base_url,
+                    &vision_api_key,
+                    &vision_config.model,
+                ))
+            } else {
+                eprintln!("Vision OCR disabled, using regular parsing");
+                parse_document(source)
+            }
+        })
+        .await;
+
+        let parsed = match parsed {
+            Ok(Ok(p)) => p,
+            Ok(Err(e)) => {
+                eprintln!("Parsing failed: {}", e);
+                let _ = app_handle_clone.emit(
+                    "document-parse-error",
+                    serde_json::json!({ "id": document_id, "error": e }),
+                );
+                return;
+            }
+            Err(e) => {
+                eprintln!("Parsing task panicked: {}", e);
+                return;
+            }
+        };
+
+        eprintln!("Parsing successful! Title: {}", parsed.title);
+
+        // Update title and page_count in database
+        {
+            let db = state_clone.db.lock().unwrap();
+            let _ = db.execute(
+                "UPDATE documents SET title = ?, page_count = ? WHERE id = ?",
+                params![parsed.title, parsed.page_count, document_id],
+            );
+        }
+
+        // Emit update event so UI can refresh title
+        let _ = app_handle_clone.emit(
+            "document-parsed",
+            serde_json::json!({
+                "id": document_id,
+                "title": parsed.title,
+                "page_count": parsed.page_count
+            }),
+        );
+
+        // Step 2: Get AI config for indexing
         let (embedding_base_url, embedding_api_key, embedding_model, vision_config, vision_base_url, vision_api_key) = {
             let cfg = state_clone.config.read().unwrap();
             let agent = cfg.get_active_agent_or_legacy();
@@ -531,4 +536,19 @@ pub async fn index_all_notes_embeddings(
     let _ = app_handle.emit("notes-indexed", serde_json::json!({ "count": indexed_count }));
 
     Ok(indexed_count)
+}
+
+/// Open a document file in the system's default application
+#[tauri::command]
+pub async fn open_document(filepath: String) -> Result<(), String> {
+    let path = Path::new(&filepath);
+
+    if !path.exists() {
+        return Err(format!("File not found: {}", filepath));
+    }
+
+    opener::open(path)
+        .map_err(|e| format!("Failed to open document: {}", e))?;
+
+    Ok(())
 }

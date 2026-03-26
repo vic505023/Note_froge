@@ -1,7 +1,7 @@
 <script lang="ts">
   import { documentsStore } from '../stores/documents.svelte';
   import { notebooksStore } from '../stores/notebooks.svelte';
-  import { open } from '@tauri-apps/plugin-dialog';
+  import { open, ask } from '@tauri-apps/plugin-dialog';
   import type { DocumentInfo } from '../types';
 
   let selectedDoc = $state<DocumentInfo | null>(null);
@@ -48,21 +48,36 @@
   }
 
   async function deleteDocument(doc: DocumentInfo) {
-    if (confirm(`Delete "${doc.filename}"?`)) {
+    console.log('🔵 deleteDocument STARTED for:', doc.filename, 'id:', doc.id);
+    console.log('🔵 Documents BEFORE confirm:', documentsStore.documents.map(d => ({ id: d.id, name: d.filename })));
+
+    const confirmed = confirm(`Delete "${doc.filename}"?`);
+
+    console.log('🔵 User confirmed:', confirmed);
+    console.log('🔵 Documents AFTER confirm:', documentsStore.documents.map(d => ({ id: d.id, name: d.filename })));
+
+    if (confirmed) {
       try {
+        console.log('🔵 Calling documentsStore.remove()');
         await documentsStore.remove(doc.id);
+        console.log('🔵 Document removed successfully');
       } catch (err) {
         console.error('Failed to delete document:', err);
         alert('Failed to delete: ' + err);
       }
+    } else {
+      console.log('🔵 Delete cancelled by user');
     }
   }
 
   function showDocContextMenu(doc: DocumentInfo, event: MouseEvent) {
     event.preventDefault();
+    event.stopPropagation();
+    console.log('🟡 Context menu opened for:', doc.filename, 'id:', doc.id);
     selectedDoc = doc;
-    contextMenuX = event.clientX;
-    contextMenuY = event.clientY;
+    // Смещаем меню чтобы курсор не был над кнопкой Delete
+    contextMenuX = event.clientX + 5;
+    contextMenuY = event.clientY + 5;
     showContextMenu = true;
   }
 
@@ -96,41 +111,12 @@
     }
   }
 
-  function getFileIcon(fileType: string) {
-    switch (fileType.toLowerCase()) {
-      case 'pdf':
-        return `<svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-          <path d="M14 2H6C5.46957 2 4.96086 2.21071 4.58579 2.58579C4.21071 2.96086 4 3.46957 4 4V20C4 20.5304 4.21071 21.0391 4.58579 21.4142C4.96086 21.7893 5.46957 22 6 22H18C18.5304 22 19.0391 21.7893 19.4142 21.4142C19.7893 21.0391 20 20.5304 20 20V8L14 2Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-          <path d="M14 2V8H20" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-          <path d="M10 13H8V17M8 13V17M8 13C8 13 8.5 13 9 13C9.5 13 10 13.5 10 14C10 14.5 9.5 15 9 15H8" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
-          <path d="M12 13H13C13.5 13 14 13.5 14 14V16C14 16.5 13.5 17 13 17H12V13Z" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
-          <path d="M16 13V17M16 13H18M16 15H17.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>`;
-      case 'docx':
-        return `<svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-          <path d="M14 2H6C5.46957 2 4.96086 2.21071 4.58579 2.58579C4.21071 2.96086 4 3.46957 4 4V20C4 20.5304 4.21071 21.0391 4.58579 21.4142C4.96086 21.7893 5.46957 22 6 22H18C18.5304 22 19.0391 21.7893 19.4142 21.4142C19.7893 21.0391 20 20.5304 20 20V8L14 2Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-          <path d="M14 2V8H20" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-          <path d="M8 13L9.5 17L11 13M11 13L12.5 17L14 13M14 13L15.5 17L17 13" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>`;
-      case 'pptx':
-        return `<svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-          <path d="M14 2H6C5.46957 2 4.96086 2.21071 4.58579 2.58579C4.21071 2.96086 4 3.46957 4 4V20C4 20.5304 4.21071 21.0391 4.58579 21.4142C4.96086 21.7893 5.46957 22 6 22H18C18.5304 22 19.0391 21.7893 19.4142 21.4142C19.7893 21.0391 20 20.5304 20 20V8L14 2Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-          <path d="M14 2V8H20" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-          <rect x="8" y="12" width="8" height="6" rx="1" stroke="currentColor" stroke-width="1.2"/>
-          <line x1="8" y1="15" x2="16" y2="15" stroke="currentColor" stroke-width="1.2"/>
-        </svg>`;
-      case 'txt':
-        return `<svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-          <path d="M14 2H6C5.46957 2 4.96086 2.21071 4.58579 2.58579C4.21071 2.96086 4 3.46957 4 4V20C4 20.5304 4.21071 21.0391 4.58579 21.4142C4.96086 21.7893 5.46957 22 6 22H18C18.5304 22 19.0391 21.7893 19.4142 21.4142C19.7893 21.0391 20 20.5304 20 20V8L14 2Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-          <path d="M14 2V8H20" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-          <path d="M8 13H16M8 16H16" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
-        </svg>`;
-      default:
-        return `<svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-          <path d="M14 2H6C5.46957 2 4.96086 2.21071 4.58579 2.58579C4.21071 2.96086 4 3.46957 4 4V20C4 20.5304 4.21071 21.0391 4.58579 21.4142C4.96086 21.7893 5.46957 22 6 22H18C18.5304 22 19.0391 21.7893 19.4142 21.4142C19.7893 21.0391 20 20.5304 20 20V8L14 2Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-          <path d="M14 2V8H20" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>`;
-    }
+  function getFileIcon() {
+    return `<svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+      <path d="M14 2H6C5.46957 2 4.96086 2.21071 4.58579 2.58579C4.21071 2.96086 4 3.46957 4 4V20C4 20.5304 4.21071 21.0391 4.58579 21.4142C4.96086 21.7893 5.46957 22 6 22H18C18.5304 22 19.0391 21.7893 19.4142 21.4142C19.7893 21.0391 20 20.5304 20 20V8L14 2Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M14 2V8H20" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M8 13H16M8 16H16" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+    </svg>`;
   }
 </script>
 
@@ -151,7 +137,13 @@
       <div class="error">{documentsStore.error}</div>
     {:else if documentsStore.documents.length === 0}
       <div class="empty-state">
-        <div class="empty-icon">📚</div>
+        <div class="empty-icon">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none">
+            <path d="M4 19.5C4 18.837 4.26339 18.2011 4.73223 17.7322C5.20107 17.2634 5.83696 17 6.5 17H20" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M6.5 2H20V22H6.5C5.83696 22 5.20107 21.7366 4.73223 21.2678C4.26339 20.7989 4 20.163 4 19.5V4.5C4 3.83696 4.26339 3.20107 4.73223 2.73223C5.20107 2.26339 5.83696 2 6.5 2Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M8 6H16M8 10H16M8 14H12" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+          </svg>
+        </div>
         <div class="empty-text">No sources yet</div>
         <div class="empty-hint">Upload PDF, DOCX, PPTX, or TXT files</div>
       </div>
@@ -162,7 +154,7 @@
           oncontextmenu={(e) => showDocContextMenu(doc, e)}
         >
           <div class="doc-icon">
-            {@html getFileIcon(doc.file_type)}
+            {@html getFileIcon()}
           </div>
           <div class="doc-info">
             <div class="doc-name" title={doc.title}>
@@ -210,15 +202,65 @@
   <div
     class="context-menu"
     style="left: {contextMenuX}px; top: {contextMenuY}px;"
+    onclick={(e) => e.stopPropagation()}
   >
     <button
       class="context-menu-item"
-      onclick={() => {
-        if (selectedDoc) deleteDocument(selectedDoc);
-        closeContextMenu();
+      onclick={async (e) => {
+        console.log('🔴 BUTTON CLICKED - START');
+        console.log('🔴 Event:', e);
+        console.log('🔴 Documents in store:', documentsStore.documents.length);
+        console.log('🔴 Document IDs:', documentsStore.documents.map(d => d.id));
+
+        e.preventDefault();
+        e.stopPropagation();
+
+        console.log('🔴 After preventDefault/stopPropagation');
+        console.log('🔴 selectedDoc:', selectedDoc);
+
+        if (selectedDoc) {
+          const docId = selectedDoc.id;
+          const docFilename = selectedDoc.filename;
+
+          // Close menu first for clean UX
+          closeContextMenu();
+          console.log('🔴 Menu closed');
+
+          console.log('🔴 BEFORE CONFIRM');
+          console.log('🔴 Will show confirm for:', docFilename, 'id:', docId);
+
+          const confirmed = await ask(`Delete "${docFilename}"?`, {
+            title: 'Confirm Delete',
+            kind: 'warning'
+          });
+
+          console.log('🔴 AFTER CONFIRM, result:', confirmed);
+          console.log('🔴 Documents count after confirm:', documentsStore.documents.length);
+
+          if (confirmed) {
+            console.log('🔴 User confirmed, calling remove');
+            try {
+              await documentsStore.remove(docId);
+              console.log('🔴 Remove complete');
+            } catch (err) {
+              console.error('🔴 Remove failed:', err);
+              alert('Failed to delete: ' + err);
+            }
+          } else {
+            console.log('🔴 User cancelled');
+          }
+        } else {
+          console.log('🔴 No selectedDoc, just closing menu');
+          closeContextMenu();
+        }
+
+        console.log('🔴 BUTTON CLICKED - END');
       }}
     >
-      🗑 Delete
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="display: inline-block; vertical-align: middle; margin-right: 6px;">
+        <path d="M3 4H13M5 4V3C5 2.44772 5.44772 2 6 2H10C10.5523 2 11 2.44772 11 3V4M6 7V11M10 7V11M4 4L4.5 13C4.5 13.5523 4.94772 14 5.5 14H10.5C11.0523 14 11.5 13.5523 11.5 13L12 4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      Delete
     </button>
     {#if documentsStore.indexingErrors.has(selectedDoc.id)}
       <button
@@ -226,7 +268,11 @@
         onclick={closeContextMenu}
         title={documentsStore.indexingErrors.get(selectedDoc.id)}
       >
-        ❌ Indexing error
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="display: inline-block; vertical-align: middle; margin-right: 6px;">
+          <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.5"/>
+          <path d="M6 6L10 10M10 6L6 10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+        Indexing error
       </button>
     {/if}
   </div>
@@ -372,7 +418,7 @@
   }
 
   .status-icon.success {
-    color: var(--success);
+    color: var(--accent);
   }
 
   .status-icon.error {

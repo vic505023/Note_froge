@@ -6,6 +6,7 @@ use quick_xml::Reader;
 use quick_xml::events::Event;
 use zip::ZipArchive;
 use reqwest::Client;
+use lopdf::Document as PdfDocument;
 use crate::utils::vision::describe_image;
 
 /// Represents text from a single page/slide
@@ -103,6 +104,11 @@ pub fn parse_pdf(path: &Path) -> Result<ParsedDocument, String> {
             let pages_text: Vec<&str> = text.split('\x0C').collect();
             let page_count = pages_text.len() as u32;
 
+            eprintln!("PDF parsing: {} pages detected by form feed", page_count);
+            for (i, page_text) in pages_text.iter().enumerate() {
+                eprintln!("  Page {}: {} chars", i + 1, page_text.len());
+            }
+
             // Convert to PagedText
             let pages: Vec<PagedText> = pages_text.into_iter()
                 .enumerate()
@@ -175,6 +181,16 @@ pub async fn parse_pdf_with_vision(
 
     eprintln!("    PDF size: {} bytes", bytes.len());
 
+    // Get page count from PDF structure
+    let total_pages = match PdfDocument::load_mem(&bytes) {
+        Ok(doc) => doc.get_pages().len() as u32,
+        Err(_) => {
+            eprintln!("Failed to read PDF structure, assuming 1 page");
+            1
+        }
+    };
+    eprintln!("    PDF has {} pages (from structure)", total_pages);
+
     // First try regular extraction
     let extracted_text = match pdf_extract::extract_text_from_mem(&bytes) {
         Ok(text) => text,
@@ -199,9 +215,9 @@ pub async fn parse_pdf_with_vision(
 
     let page_count = if pages_text.is_empty() {
         // PDF has no text at all - it's a scan
-        // We'll try to process it with vision, assume at least 1 page
+        // Use page count from PDF structure
         eprintln!("PDF has no extractable text - treating as scanned document");
-        1
+        total_pages
     } else {
         pages_text.len() as u32
     };
@@ -211,39 +227,41 @@ pub async fn parse_pdf_with_vision(
     let mut all_pages: Vec<PagedText> = Vec::new();
     let temp_dir = std::env::temp_dir().join(format!("noteforge_pdf_{}", uuid::Uuid::new_v4()));
 
-    // If PDF has no pages at all (scanned), we need to try vision on page 1
+    // If PDF has no pages at all (scanned), process all pages with vision
     if pages_text.is_empty() && vision_enabled && !api_key.is_empty() {
-        eprintln!("No text pages found, attempting vision OCR on page 1");
-        match pdf_page_to_image(path, 1, &temp_dir) {
-            Ok(image_path) => {
-                eprintln!("PDF page 1 rendered to image: {}", image_path.display());
-                let context = "Page 1 of PDF document (scanned)".to_string();
-                eprintln!("Calling Vision API with model: {} at {}", model, base_url);
-                match describe_image(client, base_url, api_key, model, &image_path, &context).await {
-                    Ok(vision_text) => {
-                        eprintln!("✓ Vision OCR succeeded for page 1, got {} chars", vision_text.len());
-                        all_pages.push(PagedText {
-                            page: 1,
-                            text: vision_text,
-                        });
-                    }
-                    Err(e) => {
-                        eprintln!("✗ Vision OCR FAILED for page 1: {}", e);
-                        eprintln!("  Model: {}, Base URL: {}", model, base_url);
-                        eprintln!("  API key present: {}", !api_key.is_empty());
-                        all_pages.push(PagedText {
-                            page: 1,
-                            text: String::new(),
-                        });
+        eprintln!("No text pages found, attempting vision OCR on all {} pages", page_count);
+        for page_num in 1..=page_count {
+            match pdf_page_to_image(path, page_num, &temp_dir) {
+                Ok(image_path) => {
+                    eprintln!("PDF page {} rendered to image: {}", page_num, image_path.display());
+                    let context = format!("Page {} of {} in PDF document (scanned)", page_num, page_count);
+                    eprintln!("Calling Vision API for page {} with model: {} at {}", page_num, model, base_url);
+                    match describe_image(client, base_url, api_key, model, &image_path, &context).await {
+                        Ok(vision_text) => {
+                            eprintln!("✓ Vision OCR succeeded for page {}, got {} chars", page_num, vision_text.len());
+                            all_pages.push(PagedText {
+                                page: page_num,
+                                text: vision_text,
+                            });
+                        }
+                        Err(e) => {
+                            eprintln!("✗ Vision OCR FAILED for page {}: {}", page_num, e);
+                            eprintln!("  Model: {}, Base URL: {}", model, base_url);
+                            eprintln!("  API key present: {}", !api_key.is_empty());
+                            all_pages.push(PagedText {
+                                page: page_num,
+                                text: String::new(),
+                            });
+                        }
                     }
                 }
-            }
-            Err(e) => {
-                eprintln!("✗ Failed to render page 1: {}", e);
-                all_pages.push(PagedText {
-                    page: 1,
-                    text: String::new(),
-                });
+                Err(e) => {
+                    eprintln!("✗ Failed to render page {}: {}", page_num, e);
+                    all_pages.push(PagedText {
+                        page: page_num,
+                        text: String::new(),
+                    });
+                }
             }
         }
     }

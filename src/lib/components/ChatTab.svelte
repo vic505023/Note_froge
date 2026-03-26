@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { invoke } from '@tauri-apps/api/core';
   import { aiStore } from '../stores/ai.svelte';
   import { notesStore } from '../stores/notes.svelte';
   import { settingsStore } from '../stores/settings.svelte';
@@ -27,11 +28,16 @@
     return activeAgent?.models || [];
   });
 
-  // Set initial selected model
+  // Restore selected model from settings or use first available
   $effect(() => {
     const models = availableModels();
-    if (models.length > 0 && !models.includes(selectedModel)) {
-      selectedModel = models[0];
+    if (models.length > 0) {
+      const savedModel = settingsStore.config?.ui.selected_model;
+      if (savedModel && models.includes(savedModel)) {
+        selectedModel = savedModel;
+      } else if (!models.includes(selectedModel)) {
+        selectedModel = models[0];
+      }
     }
   });
 
@@ -39,9 +45,25 @@
     showModelDropdown = !showModelDropdown;
   }
 
-  function selectModel(model: string) {
+  async function selectModel(model: string) {
     selectedModel = model;
     showModelDropdown = false;
+
+    // Save selected model to settings
+    if (settingsStore.config) {
+      try {
+        const updatedConfig = {
+          ...settingsStore.config,
+          ui: {
+            ...settingsStore.config.ui,
+            selected_model: model
+          }
+        };
+        await settingsStore.saveSettings(updatedConfig);
+      } catch (err) {
+        console.error('Failed to save selected model:', err);
+      }
+    }
   }
 
   // Auto-scroll to bottom on new messages
@@ -177,9 +199,31 @@
   function handleStop() {
     aiStore.stopStreaming();
   }
+
+  async function handleOpenDocument(filepath: string) {
+    try {
+      await invoke('open_document', { filepath });
+    } catch (err) {
+      console.error('Failed to open document:', err);
+      alert(`Failed to open document: ${err}`);
+    }
+  }
 </script>
 
 <div class="chat-container">
+  <div class="chat-header">
+    <button
+      class="clear-chat-btn"
+      onclick={handleClear}
+      title="Clear chat history"
+      disabled={aiStore.messages.length === 0 && !aiStore.currentStreamContent}
+    >
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+        <path d="M3 4H13M5 4V3C5 2.448 5.448 2 6 2H10C10.552 2 11 2.448 11 3V4M6 7V11M10 7V11M4 4H12V13C12 13.552 11.552 14 11 14H5C4.448 14 4 13.552 4 13V4Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      Clear
+    </button>
+  </div>
   <div class="chat-messages" bind:this={chatContainer}>
     {#if aiStore.messages.length === 0 && !aiStore.currentStreamContent}
       <div class="empty-state">
@@ -212,16 +256,11 @@
             </div>
             <div class="sources-list">
               {#each aiStore.sources as source}
-                <div class="source-item">
-                  <svg class="source-icon" width="16" height="16" viewBox="0 0 16 16" fill="none">
-                    <path d="M10 2H4C3.46957 2 3 2.46957 3 3V13C3 13.5304 3.46957 14 4 14H12C12.5304 14 13 13.5304 13 13V5L10 2Z" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
-                    <path d="M10 2V5H13" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
-                    <path d="M6 8H10M6 10H10" stroke="currentColor" stroke-width="1" stroke-linecap="round"/>
-                  </svg>
-                  <span class="source-name">
-                    {source.filename}{#if source.page}, {source.filename.toLowerCase().endsWith('.pptx') ? `slide ${source.page}` : `p.${source.page}`}{/if}
-                  </span>
+                <div class="source-item" onclick={() => handleOpenDocument(source.filepath)}>
                   <span class="source-relevance">{source.relevance}%</span>
+                  <span class="source-name" title={source.filename}>
+                    {source.filename}
+                  </span>
                 </div>
               {/each}
             </div>
@@ -317,7 +356,7 @@
             type="button"
             disabled={availableModels().length === 0}
           >
-            {selectedModel || 'No models'}
+            <span class="model-name">{selectedModel || 'No models'}</span>
             <svg class="dropdown-arrow" width="12" height="12" viewBox="0 0 12 12" fill="none">
               <path d="M3 5L6 8L9 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
@@ -388,12 +427,55 @@
     display: flex;
     flex-direction: column;
     height: 100%;
+    position: relative;
+  }
+
+  .chat-header {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    padding: 8px 12px;
+    background: linear-gradient(to bottom, var(--bg-primary) 0%, transparent 100%);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    border-bottom: 1px solid var(--border);
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 10;
+  }
+
+  .clear-chat-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .clear-chat-btn:hover:not(:disabled) {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+    border-color: var(--error);
+  }
+
+  .clear-chat-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
   }
 
   .chat-messages {
     flex: 1;
     overflow-y: auto;
-    padding: 16px;
+    padding: 46px 16px 16px 16px;
   }
 
   /* Scrollbar */
@@ -571,6 +653,7 @@
     display: flex;
     align-items: center;
     gap: 4px;
+    min-width: 0;
   }
 
   .control-btn {
@@ -606,15 +689,18 @@
   }
 
   .model-select-wrapper {
-    flex: 1;
+    flex: 1 1 auto;
     max-width: 140px;
+    min-width: 0;
     position: relative;
+    overflow: visible;
   }
 
   .model-select {
     width: 100%;
+    min-width: 0;
     height: 28px;
-    padding: 0 28px 0 10px;
+    padding: 0 10px;
     background: transparent;
     border: 1px solid var(--border);
     border-radius: 6px;
@@ -626,10 +712,17 @@
     text-align: left;
     display: flex;
     align-items: center;
-    white-space: nowrap;
+    gap: 4px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .model-name {
+    flex: 1;
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
-    position: relative;
+    white-space: nowrap;
   }
 
   .model-select:hover:not(:disabled) {
@@ -643,10 +736,7 @@
   }
 
   .dropdown-arrow {
-    position: absolute;
-    right: 8px;
-    top: 50%;
-    transform: translateY(-50%);
+    flex-shrink: 0;
     color: var(--text-muted);
     pointer-events: none;
   }
@@ -657,7 +747,9 @@
     left: 0;
     right: 0;
     margin-bottom: 4px;
-    background: var(--bg-elevated);
+    background: rgba(26, 27, 38, 0.7);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
     border: 1px solid var(--border);
     border-radius: 6px;
     overflow: hidden;
@@ -718,6 +810,7 @@
     border-radius: 4px;
     font-size: 12px;
     transition: background 0.15s ease;
+    cursor: pointer;
   }
 
   .source-item:hover {
@@ -731,10 +824,19 @@
 
   .source-name {
     flex: 1;
+    min-width: 0;
     color: var(--text-primary);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+
+  .source-page {
+    flex-shrink: 0;
+    font-size: 11px;
+    color: var(--text-muted);
+    font-weight: 500;
+    margin-left: 4px;
   }
 
   .source-relevance {
@@ -742,5 +844,6 @@
     font-size: 11px;
     color: var(--text-muted);
     font-weight: 500;
+    margin-right: 8px;
   }
 </style>

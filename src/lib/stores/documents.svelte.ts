@@ -19,22 +19,40 @@ class DocumentsStore {
     error = $state<string | null>(null);
 
     constructor() {
+        // Listen to parsing event (updates title after Vision OCR)
+        listen<{ id: number; title: string; page_count: number | null }>('document-parsed', (event) => {
+            console.log('📘 EVENT: document-parsed', event.payload.id);
+            const docIndex = this.documents.findIndex(d => d.id === event.payload.id);
+            if (docIndex !== -1) {
+                console.log('📘 Updating document at index', docIndex);
+                this.documents[docIndex] = {
+                    ...this.documents[docIndex],
+                    title: event.payload.title,
+                    page_count: event.payload.page_count
+                };
+                console.log('📘 Documents array after update:', this.documents.map(d => ({ id: d.id, title: d.title })));
+            }
+        });
+
         // Listen to indexing events
         listen<{ id: number; filename: string }>('document-indexing-start', (event) => {
             this.indexingInProgress.add(event.payload.id);
         });
 
         listen<{ id: number }>('document-indexed', (event) => {
+            console.log('📗 EVENT: document-indexed', event.payload.id);
             this.indexingInProgress.delete(event.payload.id);
             this.indexingErrors.delete(event.payload.id);
 
             // Update the document in the list to reflect indexed_at
             const docIndex = this.documents.findIndex(d => d.id === event.payload.id);
             if (docIndex !== -1) {
+                console.log('📗 Updating document at index', docIndex);
                 this.documents[docIndex] = {
                     ...this.documents[docIndex],
                     indexed_at: Date.now() / 1000 // Current timestamp in seconds
                 };
+                console.log('📗 Documents array after update:', this.documents.map(d => ({ id: d.id, indexed: !!d.indexed_at })));
             }
 
             this.loadStats();
@@ -43,6 +61,10 @@ class DocumentsStore {
         listen<{ id: number; error: string }>('document-indexing-error', (event) => {
             this.indexingInProgress.delete(event.payload.id);
             this.indexingErrors.set(event.payload.id, event.payload.error);
+        });
+
+        listen<{ id: number; error: string }>('document-parse-error', (event) => {
+            this.indexingErrors.set(event.payload.id, `Parse error: ${event.payload.error}`);
         });
     }
 
@@ -77,15 +99,21 @@ class DocumentsStore {
     }
 
     async upload(sourcePath: string, notebook: string): Promise<DocumentInfo> {
-        // Call backend in background, document will appear when ready
+        // Document appears immediately with temporary title (filename)
+        // Title will be updated after parsing via 'document-parsed' event
+        // Indexing happens in background
         const doc = await invoke<DocumentInfo>('document_upload', { sourcePath, notebook });
         this.documents = [...this.documents, doc];
+        this.indexingInProgress.add(doc.id); // Mark as indexing
         return doc;
     }
 
     async remove(id: number) {
+        console.trace('🔴 documentsStore.remove() CALLED for id:', id);
+        console.log('🔴 Documents BEFORE filter:', this.documents.map(d => d.id));
         await invoke('document_delete', { id });
         this.documents = this.documents.filter((d) => d.id !== id);
+        console.log('🔴 Documents AFTER filter:', this.documents.map(d => d.id));
         this.indexingInProgress.delete(id);
         this.indexingErrors.delete(id);
     }

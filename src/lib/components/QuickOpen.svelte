@@ -155,7 +155,9 @@
   .quick-open-modal {
     width: 500px;
     max-width: 90vw;
-    background: var(--bg-elevated);
+    background: rgba(26, 27, 38, 0.7);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
     border: 1px solid var(--border);
     border-radius: var(--radius-md);
     box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
