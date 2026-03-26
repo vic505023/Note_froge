@@ -68,16 +68,15 @@
   }
 
   .message.user .message-content {
-    background: var(--bg-elevated);
-    color: var(--text-primary);
-    border-radius: 12px 12px 2px 12px;
+    background: rgba(255, 255, 255, 0.12);
+    color: rgba(255, 255, 255, 0.95);
+    border-radius: 16px 16px 4px 16px;
   }
 
   .message.assistant .message-content {
     background: transparent;
-    color: var(--text-primary);
-    border-left: 2px solid var(--accent);
-    padding-left: 10px;
+    color: rgba(255, 255, 255, 0.85);
+    margin-left: 2px;
   }
 
   .message.assistant .message-content :global(p) {

@@ -1,11 +1,11 @@
 import { EditorState } from '@codemirror/state';
 import { EditorView, keymap } from '@codemirror/view';
-import { defaultKeymap, history, historyKeymap, undo, redo } from '@codemirror/commands';
+import { defaultKeymap, history, undo, redo } from '@codemirror/commands';
 import { markdown } from '@codemirror/lang-markdown';
 import { oneDark } from '@codemirror/theme-one-dark';
 import { wikiLinksExtension } from './wikilinks-cm';
 
-// Custom keymap that works with any keyboard layout
+// Layout-independent keyboard handler using event.code instead of event.key
 const layoutIndependentKeymap = EditorView.domEventHandlers({
   keydown(event, view) {
     // Pass through global shortcuts to window handlers
@@ -24,19 +24,27 @@ const layoutIndependentKeymap = EditorView.domEventHandlers({
       }
     }
 
-    // Undo: Ctrl+Z (works on any layout)
-    if (event.ctrlKey && event.code === 'KeyZ' && !event.shiftKey) {
+    // Undo: Ctrl+Z (works on any keyboard layout)
+    if (event.ctrlKey && event.code === 'KeyZ' && !event.shiftKey && !event.altKey) {
       event.preventDefault();
       undo(view);
       return true;
     }
-    // Redo: Ctrl+Shift+Z or Ctrl+Y (works on any layout)
-    if ((event.ctrlKey && event.code === 'KeyZ' && event.shiftKey) ||
-        (event.ctrlKey && event.code === 'KeyY')) {
+
+    // Redo: Ctrl+Shift+Z or Ctrl+Y (works on any keyboard layout)
+    if (event.ctrlKey && event.shiftKey && event.code === 'KeyZ' && !event.altKey) {
       event.preventDefault();
       redo(view);
       return true;
     }
+
+    if (event.ctrlKey && event.code === 'KeyY' && !event.shiftKey && !event.altKey) {
+      event.preventDefault();
+      redo(view);
+      return true;
+    }
+
+    // Don't interfere with any other keys - let CodeMirror handle them
     return false;
   }
 });
@@ -51,8 +59,10 @@ export function createEditorState(
       markdown(),
       oneDark,
       history(),
+      // Layout-independent keyboard handler (handles Undo/Redo and global shortcuts)
       layoutIndependentKeymap,
-      keymap.of([...historyKeymap, ...defaultKeymap]),
+      // Default keymap for all other operations (Ctrl+A, Backspace, etc.)
+      keymap.of(defaultKeymap),
       EditorView.updateListener.of((update) => {
         if (update.docChanged) {
           onChange(update.state.doc.toString());

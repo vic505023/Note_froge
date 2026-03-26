@@ -619,7 +619,7 @@
   .settings-modal {
     width: 600px;
     max-height: 80vh;
-    background: rgba(26, 27, 38, 0.7);
+    background: rgba(22, 27, 34, 0.85);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
     border-radius: 8px;

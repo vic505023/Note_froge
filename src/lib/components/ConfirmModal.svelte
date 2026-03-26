@@ -79,7 +79,7 @@
   }
 
   .modal-content {
-    background: rgba(26, 27, 38, 0.7);
+    background: rgba(22, 27, 34, 0.85);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
     border: 1px solid var(--border);

@@ -294,7 +294,7 @@
   </div>
 
   <div class="chat-input-wrapper">
-    <div class="unified-input-container">
+    <div class="unified-input-container" class:has-text={inputText.trim().length > 0}>
       <textarea
         bind:this={textareaEl}
         bind:value={inputText}
@@ -533,16 +533,25 @@
   }
 
   .chat-input-wrapper {
-    padding: 10px 12px;
+    padding: 10px 12px 12px 12px;
   }
 
   .unified-input-container {
-    background: var(--bg-elevated);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 10px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    padding: 10px 14px;
     position: relative;
     overflow: visible;
+    transition: border-color var(--transition-fast);
+  }
+
+  .unified-input-container:focus-within {
+    border-color: var(--accent);
+  }
+
+  .unified-input-container.has-text {
+    border-color: var(--accent);
   }
 
   textarea {
@@ -555,18 +564,17 @@
     border: none;
     color: var(--text-primary);
     font-family: inherit;
-    font-size: 13px;
+    font-size: 0.8125rem;
     line-height: 1.5;
     resize: none;
     overflow-y: auto;
   }
 
   .divider-line {
-    width: 100%;
+    width: calc(100% + 28px);
     height: 1px;
-    background: var(--border);
-    margin: 0 -8px 8px -8px;
-    width: calc(100% + 16px);
+    background: rgba(255, 255, 255, 0.06);
+    margin: 8px -14px 8px -14px;
   }
 
   textarea:focus {
@@ -579,7 +587,7 @@
   }
 
   textarea::placeholder {
-    color: var(--text-muted);
+    color: rgba(255, 255, 255, 0.3);
   }
 
   textarea::-webkit-scrollbar {
@@ -600,20 +608,21 @@
     height: 28px;
     background: var(--accent);
     border: none;
-    border-radius: 6px;
+    border-radius: 8px;
     color: #fff;
     font-size: 16px;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: opacity 0.15s ease;
+    transition: all var(--transition-fast);
     margin-left: auto;
     flex-shrink: 0;
   }
 
   .send-btn:hover:not(:disabled) {
     opacity: 0.85;
+    transform: scale(0.98);
   }
 
   .send-btn:disabled {
@@ -626,7 +635,7 @@
   }
 
   .send-btn.stop:hover {
-    background: #ff6b85;
+    opacity: 0.85;
   }
 
   .send-btn.stop:disabled {
@@ -652,29 +661,32 @@
   .bottom-controls {
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 6px;
     min-width: 0;
+    padding-top: 8px;
   }
 
   .control-btn {
     display: flex;
     align-items: center;
     justify-content: center;
+    gap: 4px;
     width: 28px;
     height: 28px;
     padding: 0;
-    background: transparent;
-    border: 1px solid var(--border);
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.06);
     border-radius: 6px;
-    color: var(--text-muted);
+    color: var(--text-secondary);
+    font-size: 0.6875rem;
+    font-weight: 400;
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: all var(--transition-fast);
     flex-shrink: 0;
   }
 
   .control-btn:hover:not(:disabled) {
-    background: var(--bg-hover);
-    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.08);
   }
 
   .control-btn:disabled {
@@ -683,9 +695,14 @@
   }
 
   .control-btn.active {
-    background: rgba(122, 162, 247, 0.12);
-    border-color: var(--accent);
-    color: var(--accent);
+    background: var(--accent);
+    border-color: transparent;
+    color: var(--text-primary);
+  }
+
+  .control-btn.active:hover:not(:disabled) {
+    background: var(--accent);
+    opacity: 0.85;
   }
 
   .model-select-wrapper {
@@ -704,8 +721,8 @@
     background: transparent;
     border: 1px solid var(--border);
     border-radius: 6px;
-    color: var(--text-secondary);
-    font-size: 0.75rem;
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 11px;
     font-weight: 500;
     cursor: pointer;
     transition: all 0.15s ease;
@@ -747,7 +764,7 @@
     left: 0;
     right: 0;
     margin-bottom: 4px;
-    background: rgba(26, 27, 38, 0.7);
+    background: rgba(22, 27, 34, 0.85);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
     border: 1px solid var(--border);

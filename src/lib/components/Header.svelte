@@ -101,10 +101,6 @@
     {#if notesStore.currentFile}
       <div class="editor-left"></div>
       <div class="current-file">
-        <svg class="file-icon" width="14" height="14" viewBox="0 0 14 14" fill="none">
-          <rect x="2" y="2" width="10" height="10" rx="1.5" stroke="currentColor" stroke-width="1.2" fill="none"/>
-          <path d="M5 6H9M5 8H7" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
-        </svg>
         <span class="file-name">{notesStore.currentFile.split('/').pop()}</span>
       </div>
       <div class="editor-right">
@@ -157,23 +153,32 @@
 <style>
   .app-header {
     display: flex;
-    height: 48px;
+    height: 44px;
     background: var(--bg-secondary);
-    border-bottom: 1px solid var(--border);
     flex-shrink: 0;
+    position: relative;
+  }
+
+  .app-header::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: var(--border-subtle);
   }
 
   .header-section {
     display: flex;
     align-items: center;
-    padding: 0 16px;
     gap: 8px;
   }
 
   /* Sidebar section */
   .sidebar-section {
     justify-content: space-between;
-    border-right: 1px solid var(--border);
+    padding: 0 14px;
   }
 
   .sidebar-section.open {
@@ -201,7 +206,6 @@
   /* AI section */
   .ai-section {
     justify-content: space-between;
-    border-left: 1px solid var(--border);
   }
 
   .ai-section.open {
@@ -212,16 +216,15 @@
   .sidebar-section:has(.toggle-btn),
   .ai-section:has(.toggle-btn) {
     width: auto;
-    min-width: 48px;
+    min-width: 44px;
     justify-content: center;
   }
 
   .section-title {
     font-size: 0.8125rem;
-    font-weight: 600;
+    font-weight: 500;
     color: var(--text-primary);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
+    letter-spacing: 0;
   }
 
   .section-actions {
@@ -244,9 +247,15 @@
     justify-content: center;
     background: transparent;
     border: none;
-    border-radius: 6px;
+    border-radius: var(--radius-sm);
     color: var(--text-secondary);
+    opacity: 0.4;
     flex-shrink: 0;
+  }
+
+  .icon-btn svg {
+    width: 14px;
+    height: 14px;
   }
 
   .icon-btn {
@@ -256,30 +265,27 @@
 
   .icon-btn:hover {
     background: var(--bg-hover);
-    color: var(--text-primary);
+    opacity: 0.8;
   }
 
   .icon-btn:active {
-    background: var(--bg-hover);
-    color: var(--accent);
+    background: var(--bg-active);
+    opacity: 1;
   }
 
-  /* Current file display */
+  /* Current file display - pill style */
   .current-file {
     display: flex;
     align-items: center;
-    gap: 8px;
-    color: var(--text-primary);
-    font-size: 0.875rem;
-    font-weight: 500;
-  }
-
-  .file-icon {
-    color: var(--text-muted);
-    flex-shrink: 0;
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 6px;
+    padding: 4px 12px;
   }
 
   .file-name {
+    font-size: 0.75rem;
+    font-weight: 400;
+    color: var(--text-primary);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -287,22 +293,23 @@
 
   /* Mode switch button */
   .mode-switch-btn {
-    padding: 4px 12px;
-    font-size: 0.8125rem;
-    font-weight: 500;
+    padding: 4px 10px;
+    font-size: 0.75rem;
+    font-weight: 400;
     background: transparent;
     border: none;
-    border-radius: 6px;
+    border-radius: var(--radius-sm);
     color: var(--text-secondary);
+    opacity: 0.5;
     cursor: pointer;
-    transition: color var(--transition-fast);
+    transition: all var(--transition-fast);
   }
 
   .mode-switch-btn:hover {
-    color: var(--text-primary);
+    opacity: 0.8;
   }
 
   .mode-switch-btn:active {
-    color: var(--accent);
+    opacity: 1;
   }
 </style>

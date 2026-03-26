@@ -39,44 +39,38 @@
     height: 100%;
   }
 
-  /* Tabs */
+  /* Tabs - macOS segmented control */
   .tabs {
     display: flex;
-    width: 100%;
-    border-bottom: 1px solid var(--border);
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    padding: 2px;
+    margin: 8px 10px;
   }
 
   .tab {
     flex: 1;
-    padding: 10px 0;
+    padding: 5px 16px;
     background: transparent;
     border: none;
-    font-size: 12px;
-    font-weight: 400;
+    font-size: 0.75rem;
+    font-weight: 500;
     color: var(--text-secondary);
     cursor: pointer;
     text-align: center;
     position: relative;
-    transition: all 0.15s ease;
+    transition: all 0.2s ease;
+    border-radius: 6px;
   }
 
-  .tab:hover {
+  .tab:hover:not(.active) {
     color: var(--text-primary);
   }
 
   .tab.active {
     color: var(--text-primary);
-    font-weight: 600;
-  }
-
-  .tab.active::after {
-    content: '';
-    position: absolute;
-    bottom: -1px;
-    left: 0;
-    right: 0;
-    height: 2px;
     background: var(--accent);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
   }
 
   /* Content */

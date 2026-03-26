@@ -306,7 +306,7 @@
   {/each}
 </div>
 
-{#if contextMenu && level === 0}
+{#if contextMenu}
   <ContextMenu
     x={contextMenu.x}
     y={contextMenu.y}
@@ -338,57 +338,30 @@
     align-items: center;
     gap: 8px;
     width: 100%;
-    padding: 5px 10px;
+    padding: 6px 10px;
     margin: 1px 8px;
     width: calc(100% - 16px);
     text-align: left;
     background: transparent;
     color: var(--text-secondary);
-    border: 1px solid transparent;
+    border: none;
     cursor: pointer;
-    transition: all 0.18s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-    font-size: 13px;
-    line-height: 1.5;
+    transition: all var(--transition-fast);
+    font-size: 0.8125rem;
+    line-height: 1.4;
     font-weight: 400;
-    border-radius: 8px;
+    border-radius: 6px;
   }
 
   .file-button:hover:not(.active) {
     background: rgba(255, 255, 255, 0.04);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    border: 1px solid rgba(255, 255, 255, 0.06);
     color: var(--text-primary);
   }
 
   .file-button.active {
-    /* Refined gradient - lighter on top, darker on bottom */
-    background: linear-gradient(
-      180deg,
-      rgba(255, 255, 255, 0.09) 0%,
-      rgba(255, 255, 255, 0.06) 100%
-    );
-
-    /* Apple-style backdrop blur */
-    backdrop-filter: blur(20px) saturate(180%);
-    -webkit-backdrop-filter: blur(20px) saturate(180%);
-
-    /* Almost invisible border */
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 8px;
-
-    /* Very soft, barely visible shadows */
-    box-shadow:
-      0 0.5px 2px rgba(0, 0, 0, 0.03),
-      0 1px 3px rgba(0, 0, 0, 0.04),
-      inset 0 0.5px 0 rgba(255, 255, 255, 0.12);
-
-    /* Text styling - clean, not too bold */
-    color: rgba(255, 255, 255, 0.95);
-    font-weight: 500;
-
-    /* Minimal elevation */
-    transform: translateX(1px);
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text-primary);
+    font-weight: 400;
   }
 
   .file-button.is-directory {

@@ -151,46 +151,39 @@
     display: flex;
     flex-direction: column;
     height: 100%;
-    background: var(--bg-secondary);
   }
 
   .tabs {
     display: flex;
-    width: 100%;
-    border-bottom: 1px solid var(--border);
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    padding: 2px;
+    margin: 8px 12px 0 12px;
   }
 
   .tab {
     flex: 1;
-    padding: 10px 0;
+    padding: 5px 16px;
     background: transparent;
     border: none;
     color: var(--text-secondary);
-    font-size: 12px;
-    font-weight: 400;
+    font-size: 0.75rem;
+    font-weight: 500;
     text-align: center;
     cursor: pointer;
     position: relative;
-    transition: all 0.15s ease;
+    transition: all 0.2s ease;
+    border-radius: 6px;
   }
 
-  .tab:hover {
+  .tab:hover:not(.active) {
     color: var(--text-primary);
   }
 
   .tab.active {
     color: var(--text-primary);
-    font-weight: 600;
-  }
-
-  .tab.active::after {
-    content: '';
-    position: absolute;
-    bottom: -1px;
-    left: 0;
-    right: 0;
-    height: 2px;
     background: var(--accent);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
   }
 
   .tab-content {
@@ -203,37 +196,39 @@
   .file-list {
     flex: 1;
     overflow-y: auto;
-    padding: 8px 8px 8px 16px;
+    padding: 8px 4px;
   }
 
   .sidebar-footer {
     display: flex;
     align-items: center;
-    padding: 10px 12px;
-    border-top: 1px solid var(--border);
+    padding: 8px 10px;
+    gap: 4px;
+    border-top: 1px solid var(--border-subtle);
   }
 
   .footer-btn {
     display: flex;
     align-items: center;
     justify-content: center;
-    height: 28px;
-    padding: 0;
+    height: auto;
+    padding: 4px 8px;
     background: transparent;
     border: none;
-    color: var(--text-muted);
+    color: rgba(255, 255, 255, 0.35);
     cursor: pointer;
-    transition: color 0.15s ease;
+    transition: all var(--transition-fast);
+    border-radius: var(--radius-sm);
   }
 
   .footer-btn.icon-btn {
-    width: 28px;
+    width: auto;
+    padding: 4px;
   }
 
   .footer-btn.change-dir-btn {
-    padding: 0 8px;
-    font-size: 0.8125rem;
-    font-weight: 500;
+    font-size: 11px;
+    font-weight: 400;
     flex: 1;
     text-align: center;
   }
@@ -243,11 +238,11 @@
   }
 
   .footer-btn:hover:not(:disabled) {
-    color: var(--text-primary);
+    color: rgba(255, 255, 255, 0.55);
   }
 
   .footer-btn:disabled {
-    opacity: 0.5;
+    color: rgba(255, 255, 255, 0.2);
     cursor: not-allowed;
   }
 

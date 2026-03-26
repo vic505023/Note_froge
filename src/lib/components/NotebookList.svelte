@@ -224,29 +224,28 @@
     display: flex;
     flex-direction: column;
     height: 100%;
-    background: var(--bg-secondary);
     color: var(--text-primary);
   }
 
   .content {
     flex: 1;
     overflow-y: auto;
-    padding: 4px;
+    padding: 8px 12px;
   }
 
   .notebook-item {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 10px 16px;
+    padding: 10px 12px;
+    margin: 2px 0;
     cursor: pointer;
-    border-left: 2px solid transparent;
-    transition: all 0.15s ease;
+    transition: all var(--transition-fast);
+    border-radius: var(--radius-md);
   }
 
   .notebook-item:hover {
     background: var(--bg-hover);
-    border-left-color: var(--accent);
   }
 
   .notebook-info {
@@ -255,14 +254,14 @@
   }
 
   .notebook-name {
-    font-size: 13px;
-    font-weight: 500;
+    font-size: 0.8125rem;
+    font-weight: 450;
     color: var(--text-primary);
-    margin-bottom: 4px;
+    margin-bottom: 3px;
   }
 
   .notebook-stats {
-    font-size: 11px;
+    font-size: 0.6875rem;
     color: var(--text-muted);
   }
 
@@ -274,7 +273,7 @@
     padding: 40px 20px;
     text-align: center;
     color: var(--text-muted);
-    font-size: 13px;
+    font-size: 0.8125rem;
   }
 
   .empty-state p {
@@ -284,22 +283,23 @@
   .create-first-btn {
     padding: 8px 16px;
     background: var(--accent);
-    color: var(--bg-primary);
+    color: #fff;
     border: none;
-    border-radius: 6px;
-    font-size: 13px;
-    font-weight: 500;
+    border-radius: var(--radius-sm);
+    font-size: 0.8125rem;
+    font-weight: 450;
     cursor: pointer;
-    transition: background 0.15s ease;
+    transition: all var(--transition-fast);
   }
 
   .create-first-btn:hover {
     background: var(--accent-hover);
+    transform: translateY(-1px);
   }
 
   .footer {
-    padding: 10px 12px;
-    border-top: 1px solid var(--border);
+    padding: 8px 10px;
+    border-top: 1px solid var(--border-subtle);
     display: flex;
     align-items: center;
     gap: 4px;
@@ -315,7 +315,8 @@
     color: var(--text-muted);
     cursor: pointer;
     padding: 0;
-    transition: color 0.15s ease;
+    transition: all var(--transition-fast);
+    border-radius: var(--radius-sm);
   }
 
   .footer-btn.icon-btn {
@@ -325,18 +326,19 @@
 
   .footer-btn.change-dir-btn {
     padding: 0 8px;
-    font-size: 0.8125rem;
-    font-weight: 500;
+    font-size: 0.75rem;
+    font-weight: 450;
     flex: 1;
     text-align: center;
   }
 
   .footer-btn:hover:not(:disabled) {
     color: var(--text-primary);
+    background: var(--bg-hover);
   }
 
   .footer-btn:disabled {
-    opacity: 0.5;
+    opacity: 0.4;
     cursor: not-allowed;
   }
 
@@ -354,18 +356,18 @@
   }
 
   .error {
-    padding: 12px;
-    margin: 8px;
-    background: rgba(247, 118, 142, 0.1);
-    border: 1px solid var(--error);
-    border-radius: 6px;
+    padding: 10px 12px;
+    margin: 8px 12px;
+    background: rgba(255, 69, 58, 0.08);
+    border: 1px solid rgba(255, 69, 58, 0.2);
+    border-radius: var(--radius-sm);
     color: var(--error);
-    font-size: 12px;
+    font-size: 0.75rem;
   }
 
   .context-menu {
     position: fixed;
-    background: rgba(26, 27, 38, 0.7);
+    background: rgba(22, 27, 34, 0.85);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
     border: 1px solid var(--border);
@@ -411,7 +413,7 @@
   }
 
   .modal {
-    background: rgba(26, 27, 38, 0.7);
+    background: rgba(22, 27, 34, 0.85);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
     border: 1px solid var(--border);

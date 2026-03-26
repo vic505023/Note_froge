@@ -218,6 +218,7 @@
     height: 100vh;
     width: 100vw;
     overflow: hidden;
+    background: var(--bg-base);
   }
 
   .main-content {
@@ -228,10 +229,12 @@
 
   .sidebar {
     width: var(--sidebar-width);
-    background: var(--bg-secondary);
-    border-right: 1px solid var(--border);
-    overflow: hidden;
+    background: var(--glass-bg);
+    backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+    overflow: visible;
     flex-shrink: 0;
+    border-right: 1px solid rgba(255, 255, 255, 0.08);
   }
 
   .editor-container {
@@ -243,24 +246,27 @@
   }
 
   .resizer {
-    width: 4px;
-    background: transparent;
+    width: 1px;
+    background: var(--border-subtle);
     cursor: col-resize;
     flex-shrink: 0;
     position: relative;
-    transition: background 0.15s ease;
+    transition: background var(--transition-fast);
   }
 
   .resizer:hover,
   .resizer.resizing {
     background: var(--accent);
+    box-shadow: 0 0 8px var(--accent-glow);
   }
 
   .ai-panel {
     width: var(--ai-width);
-    background: var(--bg-secondary);
-    border-left: 1px solid var(--border);
+    background: var(--glass-bg);
+    backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(180%);
     overflow: hidden;
     flex-shrink: 0;
+    border-left: 1px solid rgba(255, 255, 255, 0.08);
   }
 </style>
