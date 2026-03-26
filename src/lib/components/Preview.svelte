@@ -14,6 +14,13 @@
   function handleClick(event: MouseEvent) {
     const target = event.target as HTMLElement;
 
+    // Task list checkboxes
+    if (target.tagName === 'INPUT' && target.getAttribute('type') === 'checkbox') {
+      event.preventDefault();
+      handleCheckboxToggle(target as HTMLInputElement);
+      return;
+    }
+
     // Wiki-links
     if (target.classList.contains('wiki-link')) {
       event.preventDefault();
@@ -44,6 +51,49 @@
         });
       }
       return;
+    }
+  }
+
+  async function handleCheckboxToggle(checkbox: HTMLInputElement) {
+    const taskText = checkbox.getAttribute('data-task-text');
+    if (!taskText || !notesStore.currentFile) return;
+
+    try {
+      // Читаем текущий контент файла
+      const currentContent = notesStore.currentContent;
+      const lines = currentContent.split('\n');
+
+      // Ищем строку с этой задачей
+      const pattern = checkbox.checked
+        ? `- [ ] ${taskText}`
+        : `- [x] ${taskText}`;
+      const replacement = checkbox.checked
+        ? `- [x] ${taskText}`
+        : `- [ ] ${taskText}`;
+
+      let found = false;
+      const newLines = lines.map(line => {
+        if (!found && line.trim() === pattern.trim()) {
+          found = true;
+          return line.replace(pattern, replacement);
+        }
+        return line;
+      });
+
+      if (found) {
+        const newContent = newLines.join('\n');
+        await invoke('note_write', {
+          path: notesStore.currentFile,
+          content: newContent
+        });
+
+        // Обновляем store
+        notesStore.updateContent(newContent);
+      }
+    } catch (err) {
+      console.error('Failed to toggle checkbox:', err);
+      // Возвращаем состояние чекбокса
+      checkbox.checked = !checkbox.checked;
     }
   }
 
@@ -221,6 +271,7 @@
 
   /* Блоки кода */
   :global(.preview pre.hljs) {
+    position: relative;
     background: var(--bg-secondary);
     border-radius: 6px;
     padding: 16px;
@@ -229,6 +280,22 @@
     font-family: 'JetBrains Mono', 'Fira Code', monospace;
     font-size: 0.9em;
     line-height: 1.5;
+  }
+
+  /* Язык программирования в углу */
+  :global(.preview pre.hljs[data-lang]::after) {
+    content: attr(data-lang);
+    position: absolute;
+    top: 8px;
+    right: 12px;
+    background: rgba(0, 0, 0, 0.3);
+    color: var(--text-secondary);
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-size: 0.75em;
+    font-family: 'JetBrains Mono', monospace;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
   }
 
   :global(.preview pre.hljs code) {
@@ -255,8 +322,43 @@
   }
 
   :global(.preview li.task-list-item input[type="checkbox"]) {
-    margin-right: 0.5em;
-    cursor: default;
+    width: 18px;
+    height: 18px;
+    min-width: 18px;
+    max-width: 18px;
+    margin: 0 0.5em 0 0;
+    padding: 0;
+    cursor: pointer;
+    appearance: none;
+    -webkit-appearance: none;
+    border: 2px solid var(--border);
+    border-radius: 4px;
+    background: transparent;
+    vertical-align: middle;
+    position: relative;
+    transition: all 0.2s ease;
+    flex-shrink: 0;
+  }
+
+  :global(.preview li.task-list-item input[type="checkbox"]:hover) {
+    border-color: var(--accent);
+  }
+
+  :global(.preview li.task-list-item input[type="checkbox"]:checked) {
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+
+  :global(.preview li.task-list-item input[type="checkbox"]:checked::after) {
+    content: '';
+    position: absolute;
+    left: 5px;
+    top: 2px;
+    width: 4px;
+    height: 8px;
+    border: solid var(--bg-primary);
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
   }
 
   /* Цитаты */

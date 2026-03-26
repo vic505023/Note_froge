@@ -269,4 +269,102 @@
     color: var(--text-muted);
     opacity: 0.6;
   }
+
+  /* List bullets */
+  :global(.cm-list-bullet) {
+    color: var(--accent);
+    margin-right: 0.5em;
+    font-weight: bold;
+    user-select: none;
+  }
+
+  /* Code blocks */
+  :global(.cm-line.cm-code-block-line) {
+    background: var(--bg-secondary);
+    padding: 2px 8px;
+  }
+
+  /* Rounded corners for code blocks */
+  :global(.cm-line.cm-code-block-line) {
+    border-radius: 0;
+  }
+
+  /* First line */
+  :global(.cm-line.cm-code-block-line:not(.cm-code-block-line ~ .cm-code-block-line)) {
+    border-top-left-radius: 6px;
+    border-top-right-radius: 6px;
+  }
+
+  /* Last line - fallback for single line */
+  :global(.cm-line.cm-code-block-line:not(:has(~ .cm-code-block-line))) {
+    border-bottom-left-radius: 6px;
+    border-bottom-right-radius: 6px;
+  }
+
+  /* Single line block */
+  :global(.cm-line.cm-code-block-line:only-child) {
+    border-radius: 6px;
+  }
+
+  :global(.cm-code-block-text) {
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-size: 0.92em;
+    color: var(--text-primary);
+  }
+
+  /* Hidden code block fences */
+  :global(.cm-line.cm-code-fence-hidden) {
+    height: 0 !important;
+    overflow: hidden !important;
+    line-height: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  /* Task list checkboxes */
+  :global(.cm-task-checkbox-wrapper) {
+    display: inline-block;
+    margin-right: 0.5em;
+    vertical-align: middle;
+  }
+
+  :global(.cm-task-checkbox) {
+    width: 18px;
+    height: 18px;
+    min-width: 18px;
+    max-width: 18px;
+    margin: 0;
+    padding: 0;
+    cursor: pointer;
+    appearance: none;
+    -webkit-appearance: none;
+    border: 2px solid var(--border);
+    border-radius: 4px;
+    background: transparent;
+    vertical-align: middle;
+    position: relative;
+    transition: all 0.2s ease;
+    flex-shrink: 0;
+  }
+
+  :global(.cm-task-checkbox:hover) {
+    border-color: var(--accent);
+  }
+
+  :global(.cm-task-checkbox:checked) {
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+
+  :global(.cm-task-checkbox:checked::after) {
+    content: '';
+    position: absolute;
+    left: 5px;
+    top: 2px;
+    width: 4px;
+    height: 8px;
+    border: solid var(--bg-primary);
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+  }
 </style>

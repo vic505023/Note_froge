@@ -3,6 +3,7 @@ import { EditorView, keymap } from '@codemirror/view';
 import { defaultKeymap, history, undo, redo } from '@codemirror/commands';
 import { markdown } from '@codemirror/lang-markdown';
 import { oneDark } from '@codemirror/theme-one-dark';
+import { closeBrackets, closeBracketsKeymap } from '@codemirror/autocomplete';
 import { wikiLinksExtension } from './wikilinks-cm';
 import { liveMarkdown } from './live-markdown';
 import { liveMarkdownSimple } from './live-markdown-simple';
@@ -62,10 +63,13 @@ export function createEditorState(
       markdown(),
       oneDark,
       history(),
+      closeBrackets(), // Auto-close brackets, quotes, and backticks
       // Layout-independent keyboard handler (handles Undo/Redo and global shortcuts)
       layoutIndependentKeymap,
       // Markdown keymap (списки, чекбоксы, Tab/Shift-Tab)
       markdownKeymap,
+      // Close brackets keymap (Backspace deletes both brackets if cursor between them)
+      keymap.of(closeBracketsKeymap),
       // Default keymap for all other operations (Ctrl+A, Backspace, etc.)
       keymap.of(defaultKeymap),
       EditorView.updateListener.of((update) => {

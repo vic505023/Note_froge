@@ -100,12 +100,14 @@ export function createMarkdownRenderer(): MarkdownIt {
     linkify: true,
     typographer: true,
     highlight: (str: string, lang: string) => {
+      const langAttr = lang ? ` data-lang="${md.utils.escapeHtml(lang)}"` : '';
+
       if (lang && hljs.getLanguage(lang)) {
         try {
-          return `<pre class="hljs"><code>${hljs.highlight(str, { language: lang }).value}</code></pre>`;
+          return `<pre class="hljs"${langAttr}><code>${hljs.highlight(str, { language: lang }).value}</code></pre>`;
         } catch {}
       }
-      return `<pre class="hljs"><code>${md.utils.escapeHtml(str)}</code></pre>`;
+      return `<pre class="hljs"${langAttr}><code>${md.utils.escapeHtml(str)}</code></pre>`;
     }
   });
 
@@ -116,33 +118,52 @@ export function createMarkdownRenderer(): MarkdownIt {
   md.use(wikiLinksPlugin);
   md.use(customLinkRenderer);
 
-  // Checkbox'ы в списках - простая замена через inline правило
-  const originalListItemOpen = md.renderer.rules.list_item_open || function(tokens, idx, options, env, self) {
-    return self.renderToken(tokens, idx, options);
-  };
+  // Task list plugin - добавляем checkbox'ы в списках
+  function taskListPlugin(md: MarkdownIt) {
+    let checkboxIndex = 0;
 
-  md.renderer.rules.list_item_open = function(tokens, idx, options, env, self) {
-    const token = tokens[idx];
-    // Ищем следующий text token
-    const nextTokenIdx = idx + 2;
-    if (nextTokenIdx < tokens.length) {
-      const textToken = tokens[nextTokenIdx];
-      if (textToken.type === 'inline' && textToken.content) {
-        // Проверяем на [ ] или [x]
-        const uncheckedMatch = textToken.content.match(/^\[ \] (.+)/);
-        const checkedMatch = textToken.content.match(/^\[x\] (.+)/i);
+    md.core.ruler.after('inline', 'task-lists', (state) => {
+      const tokens = state.tokens;
+      checkboxIndex = 0; // Сбрасываем счетчик для каждого документа
 
-        if (uncheckedMatch) {
-          textToken.content = `<input type="checkbox" disabled> ${uncheckedMatch[1]}`;
-          token.attrSet('class', 'task-list-item');
-        } else if (checkedMatch) {
-          textToken.content = `<input type="checkbox" disabled checked> ${checkedMatch[1]}`;
-          token.attrSet('class', 'task-list-item');
+      for (let i = 0; i < tokens.length; i++) {
+        const token = tokens[i];
+
+        if (token.type !== 'inline') continue;
+
+        // Проверяем на [ ] или [x] в начале inline содержимого
+        const match = token.content.match(/^\[([ xX])\] (.+)/);
+        if (!match) continue;
+
+        // Проверяем, что это элемент списка
+        if (i >= 2 && tokens[i - 2].type === 'list_item_open') {
+          const checked = match[1].toLowerCase() === 'x';
+          const text = match[2];
+
+          // Помечаем list_item как task-list-item
+          tokens[i - 2].attrSet('class', 'task-list-item');
+
+          // Создаем новые токены для checkbox + текст
+          const checkboxToken = new state.Token('html_inline', '', 0);
+          checkboxToken.content = checked
+            ? `<input type="checkbox" checked data-task-index="${checkboxIndex}" data-task-text="${md.utils.escapeHtml(text)}"> `
+            : `<input type="checkbox" data-task-index="${checkboxIndex}" data-task-text="${md.utils.escapeHtml(text)}"> `;
+
+          checkboxIndex++;
+
+          const textTokenNew = new state.Token('text', '', 0);
+          textTokenNew.content = text;
+
+          // Заменяем содержимое inline токена
+          token.children = [checkboxToken, textTokenNew];
         }
       }
-    }
-    return originalListItemOpen(tokens, idx, options, env, self);
-  };
+
+      return true;
+    });
+  }
+
+  md.use(taskListPlugin);
 
   return md;
 }
