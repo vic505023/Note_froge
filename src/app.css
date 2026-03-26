@@ -151,3 +151,183 @@ textarea:focus {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+
+/* ============================================ */
+/* Live Markdown — CodeMirror Decorations */
+/* ============================================ */
+
+/* Заголовки - БЕЗ вертикальных отступов */
+.cm-heading-1 {
+  font-size: 1.8em;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--text-primary);
+}
+
+.cm-heading-2 {
+  font-size: 1.5em;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--text-primary);
+}
+
+.cm-heading-3 {
+  font-size: 1.3em;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--text-primary);
+}
+
+.cm-heading-4 {
+  font-size: 1.1em;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--text-primary);
+}
+
+/* Жирный и курсив */
+.cm-bold {
+  font-weight: 700;
+}
+
+.cm-italic {
+  font-style: italic;
+}
+
+.cm-strikethrough {
+  text-decoration: line-through;
+  color: var(--text-secondary);
+}
+
+/* Inline код */
+.cm-inline-code {
+  font-family: 'JetBrains Mono', 'SF Mono', 'Courier New', monospace;
+  font-size: 0.9em;
+  background: var(--bg-elevated);
+  border-radius: 4px;
+  padding: 1px 5px;
+  color: var(--text-primary);
+}
+
+/* Буллеты */
+.cm-bullet {
+  color: var(--accent);
+  font-size: 0.8em;
+  display: inline-block;
+  width: 18px;
+  text-align: center;
+  vertical-align: baseline;
+}
+
+/* Чекбоксы */
+.cm-checkbox {
+  appearance: none;
+  width: 15px;
+  height: 15px;
+  border: 1.5px solid var(--text-muted);
+  border-radius: 3px;
+  vertical-align: middle;
+  margin-right: 6px;
+  cursor: pointer;
+  position: relative;
+  transition: all 0.15s ease;
+  background: transparent;
+}
+
+.cm-checkbox:hover {
+  border-color: var(--accent);
+}
+
+.cm-checkbox:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.cm-checkbox:checked::after {
+  content: '✓';
+  color: white;
+  font-size: 10px;
+  position: absolute;
+  top: -1px;
+  left: 2px;
+}
+
+/* Цитаты */
+.cm-blockquote {
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+/* Ссылки */
+.cm-link-text {
+  color: var(--link-url);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-color: rgba(121, 192, 255, 0.3);
+  cursor: pointer;
+}
+
+.cm-link-text:hover {
+  text-decoration-color: var(--link-url);
+}
+
+/* Highlight ==text== */
+.cm-highlight {
+  background: rgba(210, 153, 34, 0.25);
+  border-radius: 2px;
+  padding: 0 2px;
+}
+
+/* Горизонтальная линия */
+.cm-hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 12px 0;
+  display: block;
+  width: 100%;
+}
+
+/* Wiki-ссылки [[text]] */
+.cm-wiki-link-text {
+  color: var(--link-wiki);
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.cm-wiki-link-text:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* Скрытие markdown разметки */
+.cm-md-hidden {
+  font-size: 0 !important;
+  width: 0 !important;
+  display: inline-block !important;
+  overflow: hidden !important;
+}
+
+/* Буллет-точка для списков через ::before */
+.cm-list-marker-hidden::before {
+  content: '• ';
+  color: var(--accent);
+  font-weight: bold;
+  font-size: 16px;
+  line-height: normal;
+  display: inline-block;
+  margin-right: 6px;
+}
+
+/* Горизонтальная линия вместо --- */
+.cm-hr-hidden {
+  font-size: 0 !important;
+  line-height: 0 !important;
+  color: transparent !important;
+  display: inline-block !important;
+  width: 100% !important;
+  height: 1px !important;
+  border-top: 2px solid var(--border) !important;
+  margin: 12px 0 !important;
+  overflow: hidden !important;
+  vertical-align: middle !important;
+}

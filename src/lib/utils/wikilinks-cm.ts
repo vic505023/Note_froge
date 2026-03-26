@@ -37,13 +37,13 @@ class WikiLinkWidget extends WidgetType {
   }
 }
 
-// Декорация brackets [[...]]
-const bracketDecoration = Decoration.mark({ class: 'cm-wiki-bracket' });
+// Декорация для текста ссылки
 const linkDecoration = Decoration.mark({ class: 'cm-wiki-link-text' });
 
 function decorateWikiLinks(view: EditorView) {
   const builder = new RangeSetBuilder<Decoration>();
   const text = view.state.doc.toString();
+  const cursor = view.state.selection.main.head;
 
   // Find all wiki-links
   let match;
@@ -55,23 +55,34 @@ function decorateWikiLinks(view: EditorView) {
     const target = match[1];
     const alias = match[2];
 
-    // Decorate opening brackets [[
-    builder.add(start, start + 2, bracketDecoration);
-
-    // Decorate link text
-    const linkStart = start + 2;
-    const linkEnd = alias ? start + 2 + target.length : end - 2;
-    builder.add(linkStart, linkEnd, linkDecoration);
-
-    // If there's an alias, decorate the pipe and alias
-    if (alias) {
-      const pipePos = start + 2 + target.length;
-      builder.add(pipePos, pipePos + 1, bracketDecoration); // pipe
-      builder.add(pipePos + 1, end - 2, linkDecoration); // alias text
+    // НЕ декорировать если курсор внутри этой ссылки
+    if (cursor >= start && cursor <= end) {
+      continue;
     }
 
-    // Decorate closing brackets ]]
-    builder.add(end - 2, end, bracketDecoration);
+    // ПОЛНОСТЬЮ СКРЫТЬ открывающие скобки [[
+    builder.add(start, start + 2, Decoration.replace({}));
+
+    // Декорировать текст ссылки (target или alias)
+    if (alias) {
+      // Если есть alias: [[target|alias]] → показать только alias
+      const pipePos = start + 2 + target.length;
+
+      // Скрыть target
+      builder.add(start + 2, pipePos, Decoration.replace({}));
+
+      // Скрыть pipe |
+      builder.add(pipePos, pipePos + 1, Decoration.replace({}));
+
+      // Стилизовать alias
+      builder.add(pipePos + 1, end - 2, linkDecoration);
+    } else {
+      // Если нет alias: [[target]] → показать target
+      builder.add(start + 2, end - 2, linkDecoration);
+    }
+
+    // ПОЛНОСТЬЮ СКРЫТЬ закрывающие скобки ]]
+    builder.add(end - 2, end, Decoration.replace({}));
   }
 
   return builder.finish();
@@ -87,7 +98,7 @@ const wikiLinkDecorations = ViewPlugin.fromClass(
     }
 
     update(update: ViewUpdate) {
-      if (update.docChanged || update.viewportChanged) {
+      if (update.docChanged || update.viewportChanged || update.selectionSet) {
         this.decorations = decorateWikiLinks(update.view);
       }
     }

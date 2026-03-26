@@ -4,6 +4,9 @@ import { defaultKeymap, history, undo, redo } from '@codemirror/commands';
 import { markdown } from '@codemirror/lang-markdown';
 import { oneDark } from '@codemirror/theme-one-dark';
 import { wikiLinksExtension } from './wikilinks-cm';
+import { liveMarkdown } from './live-markdown';
+import { liveMarkdownSimple } from './live-markdown-simple';
+import { markdownKeymap } from './markdown-keymap';
 
 // Layout-independent keyboard handler using event.code instead of event.key
 const layoutIndependentKeymap = EditorView.domEventHandlers({
@@ -61,6 +64,8 @@ export function createEditorState(
       history(),
       // Layout-independent keyboard handler (handles Undo/Redo and global shortcuts)
       layoutIndependentKeymap,
+      // Markdown keymap (списки, чекбоксы, Tab/Shift-Tab)
+      markdownKeymap,
       // Default keymap for all other operations (Ctrl+A, Backspace, etc.)
       keymap.of(defaultKeymap),
       EditorView.updateListener.of((update) => {
@@ -70,6 +75,8 @@ export function createEditorState(
       }),
       EditorView.lineWrapping,
       wikiLinksExtension(), // Wiki-links support
+      liveMarkdownSimple, // ТЕСТ: упрощенная версия
+      // liveMarkdown, // Live markdown rendering (ПОСЛЕ wiki-links чтобы не конфликтовать)
     ],
   });
 }
