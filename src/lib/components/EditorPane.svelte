@@ -5,15 +5,20 @@
 
   let { viewMode = 'edit' } = $props<{ viewMode: 'edit' | 'preview' }>();
 
+  // Check if current tab is empty
+  let currentTab = $derived(notesStore.tabs.find(t => t.path === notesStore.activeTab));
+  let isEmptyTab = $derived(currentTab?.isEmpty ?? false);
+
   // Log current file changes for debugging
   $effect(() => {
     console.log('EditorPane: currentFile =', notesStore.currentFile);
     console.log('EditorPane: currentContent length =', notesStore.currentContent?.length);
+    console.log('EditorPane: isEmptyTab =', isEmptyTab);
   });
 </script>
 
 <div class="editor-pane">
-  {#if notesStore.currentFile}
+  {#if notesStore.currentFile && !isEmptyTab}
     <!-- Контент - Editor всегда в DOM, просто скрывается -->
     <div class="content-wrapper">
       <div class="editor-wrapper" class:hidden={viewMode !== 'edit'}>

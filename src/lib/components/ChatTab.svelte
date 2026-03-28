@@ -12,13 +12,24 @@
   let inputText = $state('');
   let chatContainer: HTMLDivElement;
   let textareaEl: HTMLTextAreaElement;
+  let diffViewEl: HTMLDivElement | null = null;
 
   let proposedEdit = $state<{ oldContent: string; newContent: string } | null>(null);
   let showClearHistoryModal = $state(false);
   let selectedModel = $state('');
   let showModelDropdown = $state(false);
-  let useSources = $state(true);
+  let useSources = $state(false);
   let webSearch = $state(false);
+
+  // Watch proposedEdit changes and scroll to it
+  $effect(() => {
+    console.log('proposedEdit changed:', proposedEdit ? 'SET' : 'NULL', proposedEdit);
+    if (proposedEdit && diffViewEl) {
+      setTimeout(() => {
+        diffViewEl?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+      }, 100);
+    }
+  });
 
   // Get models from active agent
   const availableModels = $derived(() => {
@@ -66,9 +77,9 @@
     }
   }
 
-  // Auto-scroll to bottom on new messages
+  // Auto-scroll to bottom on new messages or proposed edits
   $effect(() => {
-    if (chatContainer && (aiStore.messages.length > 0 || aiStore.currentStreamContent)) {
+    if (chatContainer && (aiStore.messages.length > 0 || aiStore.currentStreamContent || proposedEdit)) {
       setTimeout(() => {
         chatContainer.scrollTop = chatContainer.scrollHeight;
       }, 0);
@@ -104,25 +115,37 @@
   });
 
   async function handleSend() {
+    console.log('handleSend called, editMode:', aiStore.editMode);
     if (!inputText.trim() || aiStore.isEditingNote) return;
     if (!notesStore.currentFile || !selectedModel || aiStore.isStreaming) return;
 
     const content = inputText.trim();
     inputText = '';
 
+    console.log('About to send, editMode:', aiStore.editMode, 'content:', content.substring(0, 50));
+
     try {
       if (aiStore.editMode) {
+        console.log('EDIT MODE - calling aiStore.editNote');
+        console.log('Current note content length:', notesStore.currentContent.length);
         const newContent = await aiStore.editNote(
           content,
           notesStore.currentContent,
           notesStore.currentFile,
-          selectedModel || undefined
+          selectedModel || undefined,
+          false  // Never use sources in edit mode - only chat history + current note
         );
+
+        console.log('AI edit response length:', newContent.length);
+        console.log('AI edit response (first 200 chars):', newContent.substring(0, 200));
+        console.log('Old content length:', notesStore.currentContent.length);
 
         proposedEdit = {
           oldContent: notesStore.currentContent,
           newContent
         };
+
+        console.log('proposedEdit set:', proposedEdit);
       } else {
         await aiStore.sendMessage(
           content,
@@ -246,7 +269,7 @@
       {#each aiStore.messages as message, index}
         <ChatMessage role={message.role} content={message.content} />
 
-        {#if message.role === 'assistant' && index === aiStore.messages.length - 1 && aiStore.sources.length > 0}
+        {#if message.role === 'assistant' && message.sources && message.sources.length > 0}
           <div class="sources-section">
             <div class="sources-title">
               <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="display: inline-block; vertical-align: middle; margin-right: 4px;">
@@ -255,8 +278,8 @@
               Sources used:
             </div>
             <div class="sources-list">
-              {#each aiStore.sources as source}
-                <div class="source-item" onclick={() => handleOpenDocument(source.filepath)}>
+              {#each message.sources as source}
+                <div class="source-item" role="button" tabindex="0" onclick={() => handleOpenDocument(source.filepath)}>
                   <span class="source-relevance">{source.relevance}%</span>
                   <span class="source-name" title={source.filename}>
                     {source.filename}
@@ -270,16 +293,29 @@
 
       {#if aiStore.currentStreamContent}
         <ChatMessage role="assistant" content={aiStore.currentStreamContent} isStreaming={true} />
+
+        {#if aiStore.currentSources.length > 0}
+          <div class="sources-section">
+            <div class="sources-title">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="display: inline-block; vertical-align: middle; margin-right: 4px;">
+                <path d="M7.5 4.5L10.5 1.5C11.328 0.672 12.672 0.672 13.5 1.5C14.328 2.328 14.328 3.672 13.5 4.5L10.5 7.5M7.5 4.5L4.5 7.5M7.5 4.5L8.5 5.5M4.5 7.5L1.5 10.5C0.672 11.328 0.672 12.672 1.5 13.5C2.328 14.328 3.672 14.328 4.5 13.5L7.5 10.5M4.5 7.5L5.5 8.5M8.5 5.5L5.5 8.5M8.5 5.5L10.5 7.5M5.5 8.5L7.5 10.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              Sources used:
+            </div>
+            <div class="sources-list">
+              {#each aiStore.currentSources as source}
+                <div class="source-item" role="button" tabindex="0" onclick={() => handleOpenDocument(source.filepath)}>
+                  <span class="source-relevance">{source.relevance}%</span>
+                  <span class="source-name" title={source.filename}>
+                    {source.filename}
+                  </span>
+                </div>
+              {/each}
+            </div>
+          </div>
+        {/if}
       {/if}
 
-      {#if proposedEdit}
-        <DiffView
-          oldText={proposedEdit.oldContent}
-          newText={proposedEdit.newContent}
-          onApply={applyEdit}
-          onReject={rejectEdit}
-        />
-      {/if}
 
       {#if aiStore.error}
         <div class="error-message">
@@ -288,6 +324,17 @@
             <path d="M8 4V8M8 11H8.01" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
           </svg>
           {aiStore.error}
+        </div>
+      {/if}
+
+      {#if proposedEdit}
+        <div bind:this={diffViewEl} class="diff-view-wrapper">
+          <DiffView
+            oldText={proposedEdit.oldContent}
+            newText={proposedEdit.newContent}
+            onApply={applyEdit}
+            onReject={rejectEdit}
+          />
         </div>
       {/if}
     {/if}
@@ -467,6 +514,11 @@
     border-color: var(--error);
   }
 
+  .clear-chat-btn:active:not(:disabled) {
+    background: var(--error);
+    color: #fff;
+  }
+
   .clear-chat-btn:disabled {
     opacity: 0.4;
     cursor: not-allowed;
@@ -475,12 +527,16 @@
   .chat-messages {
     flex: 1;
     overflow-y: auto;
+    overflow-x: auto;
     padding: 46px 16px 16px 16px;
+    display: flex;
+    flex-direction: column;
   }
 
   /* Scrollbar */
   .chat-messages::-webkit-scrollbar {
     width: 8px;
+    height: 8px;
   }
 
   .chat-messages::-webkit-scrollbar-track {
@@ -496,12 +552,16 @@
     background: var(--border);
   }
 
+  .chat-messages::-webkit-scrollbar-corner {
+    background: var(--bg-primary);
+  }
+
   .empty-state {
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    height: 100%;
+    flex: 1;
     gap: 12px;
     color: var(--text-muted);
   }
@@ -530,6 +590,10 @@
     border-radius: 4px;
     color: var(--error);
     font-size: 12px;
+  }
+
+  .diff-view-wrapper {
+    margin-top: 12px;
   }
 
   .chat-input-wrapper {
@@ -798,6 +862,7 @@
 
   .sources-section {
     margin-top: 12px;
+    margin-bottom: 24px;
     padding: 12px;
     background: var(--bg-elevated);
     border: 1px solid var(--border);
@@ -834,11 +899,6 @@
     background: var(--bg-hover);
   }
 
-  .source-icon {
-    flex-shrink: 0;
-    font-size: 14px;
-  }
-
   .source-name {
     flex: 1;
     min-width: 0;
@@ -846,14 +906,6 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-  }
-
-  .source-page {
-    flex-shrink: 0;
-    font-size: 11px;
-    color: var(--text-muted);
-    font-weight: 500;
-    margin-left: 4px;
   }
 
   .source-relevance {

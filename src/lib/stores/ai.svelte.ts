@@ -1,14 +1,6 @@
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
-import type { ChatMessage } from '../types';
-
-interface Source {
-  filename: string;
-  filepath: string;  // Full path to the document file
-  relevance: number;
-  pages?: number[];  // Optional pages/slides used from this document
-  file_type?: string;  // Document type (pdf, pptx, docx, txt)
-}
+import type { ChatMessage, Source } from '../types';
 
 class AIStore {
   messages = $state<ChatMessage[]>([]);
@@ -18,7 +10,7 @@ class AIStore {
   error = $state<string | null>(null);
   currentNotePath = $state<string | null>(null);
   isEditingNote = $state(false);
-  sources = $state<Source[]>([]);
+  currentSources = $state<Source[]>([]); // Temporary sources for streaming message
 
   private unlistenChunk: UnlistenFn | null = null;
   private unlistenDone: UnlistenFn | null = null;
@@ -43,8 +35,9 @@ class AIStore {
     this.unlistenDone = await listen('ai-done', async () => {
       const currentContent = this.currentStreamContent;
       const notePath = this.currentNotePath;
+      const sources = this.currentSources.length > 0 ? this.currentSources : undefined;
 
-      console.log('AI done, saving assistant message. Content length:', currentContent.length, 'notePath:', notePath);
+      console.log('AI done, saving assistant message. Content length:', currentContent.length, 'notePath:', notePath, 'sources:', sources?.length || 0);
 
       // Save to database
       if (notePath && currentContent) {
@@ -54,21 +47,23 @@ class AIStore {
             notePath,
             role: 'assistant',
             content: currentContent,
-            mode: 'chat'
+            mode: 'chat',
+            sources: sources || null
           });
-          console.log('Assistant message saved to DB');
+          console.log('Assistant message saved to DB with sources');
         } catch (err) {
           console.error('Failed to save assistant message:', err);
         }
       }
 
-      // Update state
+      // Update state - add message with sources
       this.messages = [
         ...this.messages,
-        { role: 'assistant', content: currentContent }
+        { role: 'assistant', content: currentContent, sources }
       ];
       this.isStreaming = false;
       this.currentStreamContent = '';
+      this.currentSources = []; // Clear temporary sources
     });
 
     this.unlistenError = await listen<{ error: string }>('ai-error', (event) => {
@@ -79,7 +74,7 @@ class AIStore {
 
     this.unlistenSources = await listen<{ sources: Source[] }>('ai-sources', (event) => {
       console.log('AI sources received:', event.payload.sources);
-      this.sources = event.payload.sources;
+      this.currentSources = event.payload.sources;
     });
   }
 
@@ -95,7 +90,8 @@ class AIStore {
       console.log('Loaded history entries:', history.length);
       this.messages = history.map(h => ({
         role: h.role as 'user' | 'assistant' | 'system',
-        content: h.content
+        content: h.content,
+        sources: h.sources || undefined
       }));
     } catch (err) {
       console.error('Failed to load chat history:', err);
@@ -127,7 +123,8 @@ class AIStore {
           notePath,
           role: 'user',
           content,
-          mode: 'chat'
+          mode: 'chat',
+          sources: null
         });
         console.log('User message saved');
       }
@@ -152,7 +149,7 @@ class AIStore {
     }
   }
 
-  async editNote(instruction: string, currentContent: string, notePath: string | null, model?: string): Promise<string> {
+  async editNote(instruction: string, currentContent: string, notePath: string | null, model?: string, useSources: boolean = true): Promise<string> {
     const userMessage: ChatMessage = { role: 'user', content: instruction };
 
     // Get current conversation history
@@ -172,7 +169,8 @@ class AIStore {
           notePath,
           role: 'user',
           content: instruction,
-          mode: 'chat'
+          mode: 'chat',
+          sources: null
         });
       }
 
@@ -182,7 +180,8 @@ class AIStore {
             currentContent,
             notebook: notePath?.split('/')[0] || '',
             previousMessages,
-            model: model || null
+            model: model || null,
+            useSources
         });
 
       this.isEditingNote = false;
@@ -223,7 +222,8 @@ class AIStore {
           notePath,
           role: 'assistant',
           content: assistantMessage.content,
-          mode: 'chat'
+          mode: 'chat',
+          sources: null
         });
       } catch (err) {
         console.error('Failed to save assistant message:', err);
@@ -247,7 +247,8 @@ class AIStore {
           notePath,
           role: 'assistant',
           content: assistantMessage.content,
-          mode: 'chat'
+          mode: 'chat',
+          sources: null
         });
       } catch (err) {
         console.error('Failed to save assistant message:', err);

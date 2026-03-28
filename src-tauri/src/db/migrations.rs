@@ -22,6 +22,11 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
         conn.pragma_update(None, "user_version", 3)?;
     }
 
+    if user_version < 4 {
+        migrate_to_v4(conn)?;
+        conn.pragma_update(None, "user_version", 4)?;
+    }
+
     Ok(())
 }
 
@@ -190,5 +195,12 @@ fn migrate_to_v3(conn: &Connection) -> Result<()> {
     // Add page column to embeddings table to track which page/slide a chunk came from
     conn.execute("ALTER TABLE embeddings ADD COLUMN page INTEGER", [])?;
     eprintln!("Migration v3: Added page column to embeddings table");
+    Ok(())
+}
+
+fn migrate_to_v4(conn: &Connection) -> Result<()> {
+    // Add sources column to chat_history to store JSON array of sources used in assistant messages
+    conn.execute("ALTER TABLE chat_history ADD COLUMN sources TEXT", [])?;
+    eprintln!("Migration v4: Added sources column to chat_history table");
     Ok(())
 }

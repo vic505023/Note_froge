@@ -18,6 +18,7 @@
   let originalConfig = $state<AppConfig | null>(null);
   let showApiKey = $state(false);
   let showVisionApiKey = $state(false);
+  let showWhisperApiKey = $state(false);
   let testStatus = $state<'idle' | 'testing' | 'success' | 'error'>('idle');
   let testError = $state('');
   let isReindexing = $state(false);
@@ -27,6 +28,7 @@
     vault: true,
     ai: true,
     vision: true,
+    whisper: false,
     editor: true
   });
 
@@ -34,7 +36,7 @@
   let newAgentName = $state('');
   let newModelInput = $state('');
 
-  function toggleSection(section: 'vault' | 'ai' | 'vision' | 'editor') {
+  function toggleSection(section: 'vault' | 'ai' | 'vision' | 'whisper' | 'editor') {
     expandedSections[section] = !expandedSections[section];
   }
 
@@ -479,6 +481,80 @@
                   type="button"
                 >
                   {showVisionApiKey ? 'Hide' : 'Show'}
+                </button>
+              </div>
+              <p class="field-hint">Leave empty to use the same API key as main AI provider</p>
+            </div>
+          </div>
+          {/if}
+        </section>
+
+        <!-- Whisper Transcription Section -->
+        <section class="settings-section">
+          <h3 class="section-header" onclick={() => toggleSection('whisper')}>
+            <svg class="chevron" class:expanded={expandedSections.whisper} width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <path d="M6 4L10 8L6 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            Whisper (YouTube Transcription)
+          </h3>
+
+          {#if expandedSections.whisper}
+          <div class="section-content">
+            <div class="field">
+              <label class="checkbox-label">
+                <input
+                  type="checkbox"
+                  bind:checked={config.whisper.enabled}
+                />
+                <span>Enable Whisper fallback for YouTube transcription</span>
+              </label>
+              <p class="field-hint">When YouTube subtitles are blocked, automatically transcribe audio using Whisper API.</p>
+            </div>
+
+            <div class="field">
+              <label for="whisper-model">Whisper Model</label>
+              <input
+                id="whisper-model"
+                type="text"
+                bind:value={config.whisper.model}
+                placeholder="whisper-1"
+              />
+              <p class="field-hint">
+                Popular providers:
+                <br/>• Groq (free): whisper-large-v3, distil-whisper-large-v3-en
+                <br/>• OpenAI ($0.006/min): whisper-1
+              </p>
+            </div>
+
+            <div class="field">
+              <label for="whisper-base-url">Whisper API Base URL (optional)</label>
+              <input
+                id="whisper-base-url"
+                type="text"
+                bind:value={config.whisper.base_url}
+                placeholder="https://api.groq.com/openai/v1 or same as main AI"
+              />
+              <p class="field-hint">
+                Leave empty to use the same API as main AI provider.
+                <br/>Groq free API: https://api.groq.com/openai/v1
+              </p>
+            </div>
+
+            <div class="field">
+              <label for="whisper-api-key">Whisper API Key (optional)</label>
+              <div class="input-with-button">
+                <input
+                  id="whisper-api-key"
+                  type={showWhisperApiKey ? 'text' : 'password'}
+                  bind:value={config.whisper.api_key}
+                  placeholder="Same as main AI"
+                />
+                <button
+                  class="browse-btn"
+                  onclick={() => showWhisperApiKey = !showWhisperApiKey}
+                  type="button"
+                >
+                  {showWhisperApiKey ? 'Hide' : 'Show'}
                 </button>
               </div>
               <p class="field-hint">Leave empty to use the same API key as main AI provider</p>
@@ -965,6 +1041,12 @@
   .btn-secondary:hover {
     background: var(--bg-hover);
     color: var(--text-primary);
+    border-color: var(--error);
+  }
+
+  .btn-secondary:active {
+    background: var(--error);
+    color: #fff;
   }
 
   .btn-primary {
@@ -988,7 +1070,7 @@
 
   .agent-card.active {
     border-color: var(--accent);
-    background: rgba(122, 162, 247, 0.05);
+    background: rgba(76, 139, 107, 0.05);
   }
 
   .agent-header {

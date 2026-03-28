@@ -1,5 +1,7 @@
 use crate::services::doc_indexer::{index_document, index_all_notes};
 use crate::services::doc_parser::{parse_document, parse_document_with_vision};
+use crate::services::youtube_parser::{parse_youtube_with_whisper, WhisperConfig};
+use crate::services::web_parser::parse_web_page;
 use crate::state::AppState;
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
@@ -551,4 +553,603 @@ pub async fn open_document(filepath: String) -> Result<(), String> {
         .map_err(|e| format!("Failed to open document: {}", e))?;
 
     Ok(())
+}
+
+/// Upload YouTube video transcript as a document
+#[tauri::command]
+pub async fn document_upload_youtube(
+    url: String,
+    notebook: String,
+    app_handle: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<DocumentInfo, String> {
+    // Get Whisper config for fallback transcription
+    let whisper_config = {
+        let cfg = state.config.read().map_err(|e| format!("Config lock error: {}", e))?;
+
+        // Only provide Whisper config if enabled and API key is set
+        if cfg.whisper.enabled {
+            let base_url = cfg.get_whisper_base_url();
+            let api_key = cfg.get_whisper_api_key();
+
+            if !api_key.is_empty() {
+                Some(WhisperConfig {
+                    base_url,
+                    api_key,
+                    model: cfg.whisper.model.clone(),
+                })
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    };
+
+    // Parse YouTube video (tries subtitles first, falls back to Whisper if configured)
+    let youtube_result = parse_youtube_with_whisper(&url, whisper_config).await?;
+
+    // Generate unique filename
+    let uuid = Uuid::new_v4();
+    let video_id = url
+        .split('=')
+        .last()
+        .and_then(|s| s.split('&').next())
+        .unwrap_or("video");
+    let unique_filename = format!("{}_youtube_{}.txt", uuid.as_simple(), video_id);
+
+    // Save transcript to documents directory
+    let home_dir = dirs::home_dir().ok_or("Cannot find home directory")?;
+    let documents_dir = home_dir.join(".noteforge").join("documents");
+    fs::create_dir_all(&documents_dir)
+        .map_err(|e| format!("Failed to create documents directory: {}", e))?;
+
+    let dest_path = documents_dir.join(&unique_filename);
+    fs::write(&dest_path, &youtube_result.text)
+        .map_err(|e| format!("Failed to write transcript: {}", e))?;
+
+    let dest_path_str = dest_path
+        .to_str()
+        .ok_or("Invalid destination path")?
+        .to_string();
+
+    let size_bytes = youtube_result.text.len() as i64;
+    let now = chrono::Utc::now().timestamp();
+
+    // Format display filename and title
+    let display_filename = format!("YouTube: {}", youtube_result.title);
+    let title = youtube_result.title.clone();
+
+    // Insert into database
+    let db = state
+        .db
+        .lock()
+        .map_err(|e| format!("DB lock error: {}", e))?;
+
+    let document_id = db
+        .query_row(
+            "INSERT INTO documents (filename, filepath, file_type, title, page_count, size_bytes, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?)
+             RETURNING id",
+            params![
+                display_filename,
+                dest_path_str,
+                "txt",
+                title,
+                None::<u32>,
+                size_bytes,
+                now,
+            ],
+            |row| row.get(0),
+        )
+        .map_err(|e| format!("Failed to insert document: {}", e))?;
+
+    // Associate with notebook
+    db.execute(
+        "INSERT INTO notebook_documents (notebook, document_id, added_at) VALUES (?, ?, ?)",
+        params![notebook, document_id, now],
+    )
+    .map_err(|e| format!("Failed to associate document with notebook: {}", e))?;
+
+    drop(db);
+
+    let doc_info = DocumentInfo {
+        id: document_id,
+        filename: display_filename.clone(),
+        filepath: dest_path_str.clone(),
+        file_type: "txt".to_string(),
+        title: title.clone(),
+        page_count: None,
+        size_bytes,
+        indexed_at: None,
+        created_at: now,
+    };
+
+    // Emit indexing start event
+    let _ = app_handle.emit(
+        "document-indexing-start",
+        serde_json::json!({ "id": document_id, "filename": display_filename.clone() }),
+    );
+
+    // Start background indexing
+    let state_clone = state.inner().clone();
+    let app_handle_clone = app_handle.clone();
+    let dest_path_clone = dest_path_str.clone();
+
+    tokio::spawn(async move {
+        // Get AI config for indexing
+        let (embedding_base_url, embedding_api_key, embedding_model, vision_config, vision_base_url, vision_api_key) = {
+            let cfg = state_clone.config.read().unwrap();
+            let agent = cfg.get_active_agent_or_legacy();
+            (
+                agent.get_embedding_base_url(),
+                agent.get_embedding_api_key(),
+                agent.embedding_model.clone(),
+                cfg.vision.clone(),
+                cfg.get_vision_base_url(),
+                cfg.get_vision_api_key(),
+            )
+        };
+
+        if embedding_api_key.is_empty() {
+            eprintln!("Skipping YouTube document indexing: embedding API key not configured");
+            return;
+        }
+
+        let config = crate::state::AIConfig {
+            base_url: embedding_base_url,
+            api_key: embedding_api_key,
+            model: String::new(),
+            embedding_model,
+        };
+
+        let client = reqwest::Client::new();
+
+        let result = tokio::task::spawn_blocking(move || {
+            let db = state_clone.db.lock().unwrap();
+            let runtime = tokio::runtime::Handle::current();
+            runtime.block_on(index_document(
+                &*db,
+                &client,
+                &config,
+                &vision_config,
+                &vision_base_url,
+                &vision_api_key,
+                &dest_path_clone
+            ))
+        }).await;
+
+        match result {
+            Ok(Ok(())) => {
+                let _ = app_handle_clone.emit(
+                    "document-indexed",
+                    serde_json::json!({ "id": document_id }),
+                );
+            }
+            Ok(Err(e)) => {
+                eprintln!("Failed to index YouTube document {}: {}", document_id, e);
+                let _ = app_handle_clone.emit(
+                    "document-indexing-error",
+                    serde_json::json!({ "id": document_id, "error": e }),
+                );
+            }
+            Err(e) => {
+                eprintln!("Indexing task panicked: {}", e);
+            }
+        }
+    });
+
+    Ok(doc_info)
+}
+
+/// Upload web page content as a document
+#[tauri::command]
+pub async fn document_upload_url(
+    url: String,
+    notebook: String,
+    app_handle: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<DocumentInfo, String> {
+    // Parse web page
+    let web_result = parse_web_page(&url).await?;
+
+    // Generate unique filename
+    let uuid = Uuid::new_v4();
+    let domain = url
+        .split("://")
+        .nth(1)
+        .and_then(|s| s.split('/').next())
+        .unwrap_or("webpage");
+    let unique_filename = format!("{}_web_{}.txt", uuid.as_simple(), domain);
+
+    // Save content to documents directory
+    let home_dir = dirs::home_dir().ok_or("Cannot find home directory")?;
+    let documents_dir = home_dir.join(".noteforge").join("documents");
+    fs::create_dir_all(&documents_dir)
+        .map_err(|e| format!("Failed to create documents directory: {}", e))?;
+
+    let dest_path = documents_dir.join(&unique_filename);
+    fs::write(&dest_path, &web_result.text)
+        .map_err(|e| format!("Failed to write content: {}", e))?;
+
+    let dest_path_str = dest_path
+        .to_str()
+        .ok_or("Invalid destination path")?
+        .to_string();
+
+    let size_bytes = web_result.text.len() as i64;
+    let now = chrono::Utc::now().timestamp();
+
+    // Use URL as display filename
+    let display_filename = url.clone();
+    let title = web_result.title.clone();
+
+    // Insert into database
+    let db = state
+        .db
+        .lock()
+        .map_err(|e| format!("DB lock error: {}", e))?;
+
+    let document_id = db
+        .query_row(
+            "INSERT INTO documents (filename, filepath, file_type, title, page_count, size_bytes, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?)
+             RETURNING id",
+            params![
+                display_filename,
+                dest_path_str,
+                "txt",
+                title,
+                None::<u32>,
+                size_bytes,
+                now,
+            ],
+            |row| row.get(0),
+        )
+        .map_err(|e| format!("Failed to insert document: {}", e))?;
+
+    // Associate with notebook
+    db.execute(
+        "INSERT INTO notebook_documents (notebook, document_id, added_at) VALUES (?, ?, ?)",
+        params![notebook, document_id, now],
+    )
+    .map_err(|e| format!("Failed to associate document with notebook: {}", e))?;
+
+    drop(db);
+
+    let doc_info = DocumentInfo {
+        id: document_id,
+        filename: display_filename.clone(),
+        filepath: dest_path_str.clone(),
+        file_type: "txt".to_string(),
+        title: title.clone(),
+        page_count: None,
+        size_bytes,
+        indexed_at: None,
+        created_at: now,
+    };
+
+    // Start background indexing
+    let state_clone = state.inner().clone();
+    let app_handle_clone = app_handle.clone();
+    let dest_path_clone = dest_path_str.clone();
+
+    tokio::spawn(async move {
+        let (embedding_base_url, embedding_api_key, embedding_model, vision_config, vision_base_url, vision_api_key) = {
+            let cfg = state_clone.config.read().unwrap();
+            let agent = cfg.get_active_agent_or_legacy();
+            (
+                agent.get_embedding_base_url(),
+                agent.get_embedding_api_key(),
+                agent.embedding_model.clone(),
+                cfg.vision.clone(),
+                cfg.get_vision_base_url(),
+                cfg.get_vision_api_key(),
+            )
+        };
+
+        if embedding_api_key.is_empty() {
+            eprintln!("Skipping URL document indexing: embedding API key not configured");
+            return;
+        }
+
+        let config = crate::state::AIConfig {
+            base_url: embedding_base_url,
+            api_key: embedding_api_key,
+            model: String::new(),
+            embedding_model,
+        };
+
+        let client = reqwest::Client::new();
+
+        let result = tokio::task::spawn_blocking(move || {
+            let db = state_clone.db.lock().unwrap();
+            let runtime = tokio::runtime::Handle::current();
+            runtime.block_on(index_document(
+                &*db,
+                &client,
+                &config,
+                &vision_config,
+                &vision_base_url,
+                &vision_api_key,
+                &dest_path_clone
+            ))
+        }).await;
+
+        match result {
+            Ok(Ok(())) => {
+                let _ = app_handle_clone.emit(
+                    "document-indexed",
+                    serde_json::json!({ "id": document_id }),
+                );
+            }
+            Ok(Err(e)) => {
+                eprintln!("Failed to index URL document {}: {}", document_id, e);
+                let _ = app_handle_clone.emit(
+                    "document-indexing-error",
+                    serde_json::json!({ "id": document_id, "error": e }),
+                );
+            }
+            Err(e) => {
+                eprintln!("Indexing task panicked: {}", e);
+            }
+        }
+    });
+
+    Ok(doc_info)
+}
+
+/// Upload text content as a document
+#[tauri::command]
+pub async fn document_upload_text(
+    title: String,
+    content: String,
+    notebook: String,
+    app_handle: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<DocumentInfo, String> {
+    if content.trim().is_empty() {
+        return Err("Content cannot be empty".to_string());
+    }
+
+    // Generate unique filename
+    let uuid = Uuid::new_v4();
+    let unique_filename = format!("{}_text.txt", uuid.as_simple());
+
+    // Save content to documents directory
+    let home_dir = dirs::home_dir().ok_or("Cannot find home directory")?;
+    let documents_dir = home_dir.join(".noteforge").join("documents");
+    fs::create_dir_all(&documents_dir)
+        .map_err(|e| format!("Failed to create documents directory: {}", e))?;
+
+    let dest_path = documents_dir.join(&unique_filename);
+    fs::write(&dest_path, &content)
+        .map_err(|e| format!("Failed to write content: {}", e))?;
+
+    let dest_path_str = dest_path
+        .to_str()
+        .ok_or("Invalid destination path")?
+        .to_string();
+
+    let size_bytes = content.len() as i64;
+    let now = chrono::Utc::now().timestamp();
+
+    // Use provided title or generate from first line
+    let doc_title = if title.trim().is_empty() {
+        let first_line = content.lines().next().unwrap_or("Text snippet");
+        let truncated = if first_line.len() > 50 {
+            format!("{}...", &first_line[..50])
+        } else {
+            first_line.to_string()
+        };
+        format!("Text: {}", truncated)
+    } else {
+        title.clone()
+    };
+
+    // Insert into database
+    let db = state
+        .db
+        .lock()
+        .map_err(|e| format!("DB lock error: {}", e))?;
+
+    let document_id = db
+        .query_row(
+            "INSERT INTO documents (filename, filepath, file_type, title, page_count, size_bytes, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?)
+             RETURNING id",
+            params![
+                doc_title.clone(),
+                dest_path_str,
+                "txt",
+                doc_title.clone(),
+                None::<u32>,
+                size_bytes,
+                now,
+            ],
+            |row| row.get(0),
+        )
+        .map_err(|e| format!("Failed to insert document: {}", e))?;
+
+    // Associate with notebook
+    db.execute(
+        "INSERT INTO notebook_documents (notebook, document_id, added_at) VALUES (?, ?, ?)",
+        params![notebook, document_id, now],
+    )
+    .map_err(|e| format!("Failed to associate document with notebook: {}", e))?;
+
+    drop(db);
+
+    let doc_info = DocumentInfo {
+        id: document_id,
+        filename: doc_title.clone(),
+        filepath: dest_path_str.clone(),
+        file_type: "txt".to_string(),
+        title: doc_title.clone(),
+        page_count: None,
+        size_bytes,
+        indexed_at: None,
+        created_at: now,
+    };
+
+    // Start background indexing
+    let state_clone = state.inner().clone();
+    let app_handle_clone = app_handle.clone();
+    let dest_path_clone = dest_path_str.clone();
+
+    tokio::spawn(async move {
+        let (embedding_base_url, embedding_api_key, embedding_model, vision_config, vision_base_url, vision_api_key) = {
+            let cfg = state_clone.config.read().unwrap();
+            let agent = cfg.get_active_agent_or_legacy();
+            (
+                agent.get_embedding_base_url(),
+                agent.get_embedding_api_key(),
+                agent.embedding_model.clone(),
+                cfg.vision.clone(),
+                cfg.get_vision_base_url(),
+                cfg.get_vision_api_key(),
+            )
+        };
+
+        if embedding_api_key.is_empty() {
+            eprintln!("Skipping text document indexing: embedding API key not configured");
+            return;
+        }
+
+        let config = crate::state::AIConfig {
+            base_url: embedding_base_url,
+            api_key: embedding_api_key,
+            model: String::new(),
+            embedding_model,
+        };
+
+        let client = reqwest::Client::new();
+
+        let result = tokio::task::spawn_blocking(move || {
+            let db = state_clone.db.lock().unwrap();
+            let runtime = tokio::runtime::Handle::current();
+            runtime.block_on(index_document(
+                &*db,
+                &client,
+                &config,
+                &vision_config,
+                &vision_base_url,
+                &vision_api_key,
+                &dest_path_clone
+            ))
+        }).await;
+
+        match result {
+            Ok(Ok(())) => {
+                let _ = app_handle_clone.emit(
+                    "document-indexed",
+                    serde_json::json!({ "id": document_id }),
+                );
+            }
+            Ok(Err(e)) => {
+                eprintln!("Failed to index text document {}: {}", document_id, e);
+                let _ = app_handle_clone.emit(
+                    "document-indexing-error",
+                    serde_json::json!({ "id": document_id, "error": e }),
+                );
+            }
+            Err(e) => {
+                eprintln!("Indexing task panicked: {}", e);
+            }
+        }
+    });
+
+    Ok(doc_info)
+}
+
+/// Convert YouTube transcript to a structured markdown note
+#[tauri::command]
+pub async fn youtube_to_note(
+    url: String,
+    _notebook: String,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    // Parse YouTube video (without Whisper fallback for youtube_to_note)
+    let youtube_result = parse_youtube_with_whisper(&url, None).await?;
+
+    // Get AI config - use first available model from settings
+    let (base_url, api_key, model) = {
+        let cfg = state
+            .config
+            .read()
+            .map_err(|e| format!("Config lock error: {}", e))?;
+        let agent = cfg.get_active_agent_or_legacy();
+
+        // Use first model from agent settings (the one user uses in chat)
+        let model = agent.models.first()
+            .cloned()
+            .ok_or("No model configured. Add models in Settings")?;
+
+        (
+            agent.base_url.clone(),
+            agent.api_key.clone(),
+            model,
+        )
+    };
+
+    if api_key.is_empty() {
+        return Err("AI API key not configured".to_string());
+    }
+
+    // Create AI client
+    let client = reqwest::Client::new();
+
+    // Prepare prompt optimized for Claude
+    let system_prompt = "You are an expert at transforming video transcripts into clear, structured markdown notes.\n\n\
+        Your task:\n\
+        1. Create a descriptive title (# heading) based on video content\n\
+        2. Add a brief summary paragraph\n\
+        3. Organize content into logical sections (## headings)\n\
+        4. Extract and highlight key points, concepts, and insights\n\
+        5. Remove filler words, repetitions, and verbal tics\n\
+        6. Preserve the original language\n\
+        7. Use lists, code blocks, and formatting where appropriate\n\n\
+        Output clean, publication-ready markdown that captures the essence of the video.";
+
+    let user_prompt = format!(
+        "Video: {} by {}\n\nTranscript:\n{}",
+        youtube_result.title, youtube_result.channel, youtube_result.text
+    );
+
+    // Make AI request
+    let request_body = serde_json::json!({
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ],
+        "stream": false
+    });
+
+    let response = client
+        .post(format!("{}/chat/completions", base_url))
+        .header("Authorization", format!("Bearer {}", api_key))
+        .header("Content-Type", "application/json")
+        .json(&request_body)
+        .send()
+        .await
+        .map_err(|e| format!("AI request failed: {}", e))?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let error_text = response.text().await.unwrap_or_default();
+        return Err(format!("AI API error {}: {}", status, error_text));
+    }
+
+    let response_json: serde_json::Value = response
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse AI response: {}", e))?;
+
+    let markdown = response_json["choices"][0]["message"]["content"]
+        .as_str()
+        .ok_or("Invalid AI response format")?
+        .to_string();
+
+    Ok(markdown)
 }

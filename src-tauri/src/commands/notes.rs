@@ -756,9 +756,81 @@ pub async fn rename_item(
             params![new_relative_path, old_path],
         )
         .map_err(|e| format!("Failed to update link targets: {}", e))?;
+
+        // Update link content in files
+        update_links_in_files(&db, &vault_path, &old_path, &new_relative_path)?;
     }
 
+    drop(db);
+
     Ok(new_relative_path)
+}
+
+/// Update links in files that reference the renamed file
+fn update_links_in_files(
+    db: &rusqlite::Connection,
+    vault_path: &PathBuf,
+    old_path: &str,
+    new_path: &str,
+) -> Result<(), String> {
+    // Extract old and new names for [[wikilink]] replacement
+    let old_name = old_path.split('/').last().unwrap_or(old_path);
+    let new_name = new_path.split('/').last().unwrap_or(new_path);
+
+    // Remove .md extension from names for wikilinks
+    let old_wiki_name = old_name.trim_end_matches(".md");
+    let new_wiki_name = new_name.trim_end_matches(".md");
+
+    // Find all files that link to the renamed file
+    let mut stmt = db
+        .prepare("SELECT DISTINCT source FROM links WHERE target = ? OR target = ?")
+        .map_err(|e| format!("Failed to prepare query: {}", e))?;
+
+    let sources: Vec<String> = stmt
+        .query_map(params![old_wiki_name, old_path], |row| row.get(0))
+        .map_err(|e| format!("Query failed: {}", e))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| format!("Failed to collect sources: {}", e))?;
+
+    // Update each file
+    for source_path in sources {
+        let full_path = vault_path.join(&source_path);
+
+        // Read file content
+        let content = match fs::read_to_string(&full_path) {
+            Ok(c) => c,
+            Err(_) => continue, // Skip if file doesn't exist or can't be read
+        };
+
+        // Replace wikilinks [[old_name]] -> [[new_name]]
+        let mut updated_content = content.clone();
+
+        // Replace [[old_name]]
+        updated_content = updated_content.replace(
+            &format!("[[{}]]", old_wiki_name),
+            &format!("[[{}]]", new_wiki_name),
+        );
+
+        // Replace [text](old_path)
+        updated_content = updated_content.replace(
+            &format!("]({})", old_path),
+            &format!("]({})", new_path),
+        );
+
+        // Also replace relative markdown links
+        updated_content = updated_content.replace(
+            &format!("]({})", old_name),
+            &format!("]({})", new_name),
+        );
+
+        // Write updated content if changed
+        if updated_content != content {
+            fs::write(&full_path, updated_content)
+                .map_err(|e| format!("Failed to update file {}: {}", source_path, e))?;
+        }
+    }
+
+    Ok(())
 }
 
 // Helper function to copy directory recursively

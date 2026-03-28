@@ -75,7 +75,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 1000;
+    z-index: 9999;
   }
 
   .modal-content {
@@ -85,7 +85,7 @@
     border: 1px solid var(--border);
     border-radius: 8px;
     padding: 24px;
-    width: 400px;
+    width: 360px;
     max-width: 90vw;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
   }
@@ -124,19 +124,31 @@
   .cancel-btn {
     background: transparent;
     color: var(--text-secondary);
+    border: 1px solid var(--border);
   }
 
   .cancel-btn:hover {
     background: var(--bg-hover);
     color: var(--text-primary);
+    border-color: var(--error);
   }
 
-  .confirm-btn {
-    background: var(--accent);
+  .cancel-btn:active {
+    background: var(--error);
     color: #fff;
   }
 
+  .confirm-btn {
+    background: var(--error);
+    color: #fff;
+    border: 1px solid var(--error);
+  }
+
   .confirm-btn:hover {
-    background: var(--accent-hover);
+    background: #c9515a;
+  }
+
+  .confirm-btn:active {
+    background: #d62839;
   }
 </style>

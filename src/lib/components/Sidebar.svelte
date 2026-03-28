@@ -158,7 +158,7 @@
     background: rgba(255, 255, 255, 0.05);
     border-radius: 8px;
     padding: 2px;
-    margin: 8px 12px 0 12px;
+    margin: 8px 10px;
   }
 
   .tab {

@@ -11,11 +11,12 @@
   }
 
   let query = $state('');
-  let searchScope = $state<'current' | 'all'>('current');
+  let searchAllNotebooks = $state(false);
   let messages = $state<Array<{ role: string; content: string }>>([]);
   let isSearching = $state(false);
   let currentResponse = $state('');
   let sources = $state<Source[]>([]);
+  let textareaEl: HTMLTextAreaElement;
 
   let unlistenChunk: (() => void) | null = null;
   let unlistenDone: (() => void) | null = null;
@@ -61,7 +62,7 @@
   async function handleSearch() {
     if (!query.trim() || isSearching) return;
 
-    const notebook = searchScope === 'current' ? notebooksStore.currentNotebook || '' : '';
+    const notebook = searchAllNotebooks ? '' : (notebooksStore.currentNotebook || '');
 
     // Add user message
     messages = [...messages, { role: 'user', content: query }];
@@ -78,12 +79,23 @@
     }
 
     query = '';
+
+    if (textareaEl) {
+      textareaEl.style.height = 'auto';
+    }
   }
 
   function handleKeydown(event: KeyboardEvent) {
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
       handleSearch();
+    }
+  }
+
+  function handleInput() {
+    if (textareaEl) {
+      textareaEl.style.height = 'auto';
+      textareaEl.style.height = Math.min(textareaEl.scrollHeight, 150) + 'px';
     }
   }
 
@@ -98,57 +110,24 @@
   }
 </script>
 
-<div class="search-tab">
-  <div class="search-header">
-    <div class="scope-selector">
-      <button
-        class="scope-btn"
-        class:active={searchScope === 'current'}
-        onclick={() => (searchScope = 'current')}
-        disabled={!notebooksStore.currentNotebook}
-        title={notebooksStore.currentNotebook || 'No notebook selected'}
-      >
-        Current notebook
-      </button>
-      <button
-        class="scope-btn"
-        class:active={searchScope === 'all'}
-        onclick={() => (searchScope = 'all')}
-      >
-        All notebooks
-      </button>
-    </div>
-    {#if messages.length > 0}
-      <button class="clear-btn" onclick={clearHistory} title="Clear history">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-          <path d="M3 4H13M5 4V3C5 2.44772 5.44772 2 6 2H10C10.5523 2 11 2.44772 11 3V4M6 7V11M10 7V11M4 4L4.5 13C4.5 13.5523 4.94772 14 5.5 14H10.5C11.0523 14 11.5 13.5523 11.5 13L12 4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-      </button>
-    {/if}
-  </div>
-
-  <div class="messages-container">
+<div class="search-container">
+  <div class="search-messages">
     {#if messages.length === 0 && !currentResponse}
       <div class="empty-state">
-        <div class="empty-icon">
-          <svg width="48" height="48" viewBox="0 0 24 24" fill="none">
-            <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.5"/>
-            <path d="M16 16L21 21" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-          </svg>
-        </div>
-        <div class="empty-title">Search your notes</div>
-        <div class="empty-text">
+        <svg width="44" height="44" viewBox="0 0 44 44" fill="none">
+          <circle cx="22" cy="22" r="20" stroke="currentColor" stroke-width="2" opacity="0.1"/>
+          <circle cx="22" cy="22" r="14" stroke="currentColor" stroke-width="1.5"/>
+          <path d="M29 29L35 35" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+        <p class="empty-title">Search Notes</p>
+        <p class="empty-description">
           Ask questions about your notes.<br />
-          AI will find and cite relevant notes.
-        </div>
+          AI will find and cite relevant passages.
+        </p>
       </div>
     {:else}
       {#each messages as message, index (index)}
-        <div class="chat-message" class:user={message.role === 'user'} class:assistant={message.role === 'assistant'}>
-          <div class="message-content">
-            {@html message.content.replace(/\n/g, '<br>')}
-          </div>
-        </div>
+        <ChatMessage role={message.role} content={message.content} />
 
         {#if message.role === 'assistant' && sources.length > 0 && index === messages.length - 1}
           <div class="sources-section">
@@ -156,14 +135,16 @@
               <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="display: inline-block; vertical-align: middle; margin-right: 4px;">
                 <path d="M7.5 4.5L10.5 1.5C11.328 0.672 12.672 0.672 13.5 1.5C14.328 2.328 14.328 3.672 13.5 4.5L10.5 7.5M7.5 4.5L4.5 7.5M7.5 4.5L8.5 5.5M4.5 7.5L1.5 10.5C0.672 11.328 0.672 12.672 1.5 13.5C2.328 14.328 3.672 14.328 4.5 13.5L7.5 10.5M4.5 7.5L5.5 8.5M8.5 5.5L5.5 8.5M8.5 5.5L10.5 7.5M5.5 8.5L7.5 10.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
               </svg>
-              Sources:
+              Sources used:
             </div>
             <div class="sources-list">
               {#each sources as source}
-                <button class="source-item" onclick={() => openNote(source.path)}>
-                  <span class="source-name">{source.path.split('/').pop()}</span>
+                <div class="source-item" onclick={() => openNote(source.path)}>
                   <span class="source-relevance">{source.relevance}%</span>
-                </button>
+                  <span class="source-name" title={source.path}>
+                    {source.path.split('/').pop()}
+                  </span>
+                </div>
               {/each}
             </div>
           </div>
@@ -171,125 +152,104 @@
       {/each}
 
       {#if currentResponse}
-        <div class="chat-message assistant streaming">
-          <div class="message-content">
-            {@html currentResponse.replace(/\n/g, '<br>')}
-          </div>
-        </div>
-      {/if}
-
-      {#if isSearching && !currentResponse}
-        <div class="loading-indicator">
-          <div class="loading-spinner"></div>
-          <span>Searching notes...</span>
-        </div>
+        <ChatMessage role="assistant" content={currentResponse} isStreaming={true} />
       {/if}
     {/if}
   </div>
 
-  <div class="search-input-container">
-    <textarea
-      class="search-input"
-      bind:value={query}
-      onkeydown={handleKeydown}
-      placeholder="Ask a question about your notes..."
-      rows="2"
-      disabled={isSearching}
-    ></textarea>
-    <button
-      class="search-btn"
-      onclick={handleSearch}
-      disabled={!query.trim() || isSearching}
-      title="Search (Enter)"
-    >
-      {#if isSearching}
-        <svg class="search-icon spinning" width="16" height="16" viewBox="0 0 16 16" fill="none">
-          <circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="2" opacity="0.25"/>
-          <path d="M 8 2 A 6 6 0 0 1 14 8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-        </svg>
-      {:else}
-        <svg class="search-icon" width="16" height="16" viewBox="0 0 16 16" fill="none">
-          <circle cx="7" cy="7" r="5" stroke="currentColor" stroke-width="1.5"/>
-          <path d="M11 11L14 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-        </svg>
-      {/if}
-    </button>
+  <div class="search-input-wrapper">
+    <div class="unified-input-container" class:has-text={query.trim().length > 0}>
+      <textarea
+        bind:this={textareaEl}
+        bind:value={query}
+        onkeydown={handleKeydown}
+        oninput={handleInput}
+        placeholder="Ask about your notes..."
+        disabled={isSearching}
+        rows="1"
+      ></textarea>
+
+      <div class="divider-line"></div>
+
+      <div class="bottom-controls">
+        <button
+          class="control-btn"
+          class:active={searchAllNotebooks}
+          onclick={() => searchAllNotebooks = !searchAllNotebooks}
+          title={searchAllNotebooks ? "Searching all notebooks" : "Searching current notebook"}
+        >
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M2 2H12V10H10V12H2V4H2V2Z" stroke="currentColor" stroke-width="1.2" fill="none"/>
+            <path d="M4 4H8V6" stroke="currentColor" stroke-width="1.2" fill="none"/>
+          </svg>
+        </button>
+
+        <span class="scope-label">
+          {searchAllNotebooks ? 'All notebooks' : 'Current notebook'}
+        </span>
+
+        {#if isSearching}
+          <button class="send-btn stop" disabled title="Searching...">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="2" fill="none" opacity="0.3"/>
+              <circle
+                cx="8"
+                cy="8"
+                r="6"
+                stroke="currentColor"
+                stroke-width="2"
+                fill="none"
+                stroke-dasharray="37.7"
+                stroke-dashoffset="9.425"
+                class="spinner"
+              />
+            </svg>
+          </button>
+        {:else}
+          <button
+            class="send-btn"
+            onclick={handleSearch}
+            disabled={!query.trim() || isSearching}
+            title="Search (Enter)"
+          >
+            ↑
+          </button>
+        {/if}
+      </div>
+    </div>
   </div>
 </div>
 
 <style>
-  .search-tab {
+  .search-container {
     display: flex;
     flex-direction: column;
     height: 100%;
-    background: var(--bg-primary);
+    position: relative;
   }
 
-  .search-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 12px;
-    border-bottom: 1px solid var(--border);
-    gap: 8px;
-  }
-
-  .scope-selector {
-    display: flex;
-    gap: 4px;
-    flex: 1;
-  }
-
-  .scope-btn {
-    flex: 1;
-    padding: 6px 12px;
-    background: var(--bg-secondary);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    color: var(--text-secondary);
-    font-size: 12px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.15s ease;
-  }
-
-  .scope-btn:hover:not(:disabled) {
-    background: var(--bg-hover);
-    color: var(--text-primary);
-  }
-
-  .scope-btn.active {
-    background: var(--accent);
-    color: #fff;
-    border-color: var(--accent);
-  }
-
-  .scope-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  .clear-btn {
-    padding: 6px 10px;
-    background: transparent;
-    border: none;
-    color: var(--text-muted);
-    font-size: 16px;
-    cursor: pointer;
-    transition: color 0.15s ease;
-  }
-
-  .clear-btn:hover {
-    color: var(--text-primary);
-  }
-
-  .messages-container {
+  .search-messages {
     flex: 1;
     overflow-y: auto;
     padding: 16px;
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
+  }
+
+  /* Scrollbar */
+  .search-messages::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  .search-messages::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .search-messages::-webkit-scrollbar-thumb {
+    background: var(--bg-hover);
+    border-radius: 4px;
+  }
+
+  .search-messages::-webkit-scrollbar-thumb:hover {
+    background: var(--border);
   }
 
   .empty-state {
@@ -298,69 +258,241 @@
     align-items: center;
     justify-content: center;
     height: 100%;
-    text-align: center;
-    padding: 40px 20px;
-  }
-
-  .empty-icon {
-    margin-bottom: 16px;
-    opacity: 0.3;
+    gap: 12px;
     color: var(--text-muted);
   }
 
   .empty-title {
-    font-size: 18px;
-    font-weight: 600;
-    color: var(--text-primary);
-    margin-bottom: 8px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--text-secondary);
   }
 
-  .empty-text {
-    font-size: 14px;
-    color: var(--text-muted);
-    line-height: 1.6;
+  .empty-description {
+    font-size: 0.8125rem;
+    text-align: center;
+    max-width: 250px;
+    line-height: 1.4;
   }
 
-  .sources-section {
-    margin: 0;
+  .search-input-wrapper {
+    padding: 10px 12px 12px 12px;
+  }
+
+  .unified-input-container {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    padding: 10px 14px;
+    position: relative;
+    overflow: visible;
+    transition: border-color var(--transition-fast);
+  }
+
+  .unified-input-container:focus-within {
+    border-color: var(--accent);
+  }
+
+  .unified-input-container.has-text {
+    border-color: var(--accent);
+  }
+
+  textarea {
+    width: 100%;
+    min-height: 20px;
+    max-height: 150px;
     padding: 0;
+    margin-bottom: 8px;
+    background: transparent;
+    border: none;
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: 0.8125rem;
+    line-height: 1.5;
+    resize: none;
+    overflow-y: auto;
+  }
+
+  .divider-line {
+    width: calc(100% + 28px);
+    height: 1px;
+    background: rgba(255, 255, 255, 0.06);
+    margin: 8px -14px 8px -14px;
+  }
+
+  textarea:focus {
+    outline: none;
+  }
+
+  textarea:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  textarea::placeholder {
+    color: rgba(255, 255, 255, 0.3);
+  }
+
+  textarea::-webkit-scrollbar {
+    width: 3px;
+  }
+
+  textarea::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  textarea::-webkit-scrollbar-thumb {
+    background: var(--bg-hover);
+    border-radius: 2px;
+  }
+
+  .send-btn {
+    width: 28px;
+    height: 28px;
+    background: var(--accent);
+    border: none;
+    border-radius: 8px;
+    color: #fff;
+    font-size: 16px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all var(--transition-fast);
+    margin-left: auto;
+    flex-shrink: 0;
+  }
+
+  .send-btn:hover:not(:disabled) {
+    opacity: 0.85;
+    transform: scale(0.98);
+  }
+
+  .send-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .send-btn.stop {
+    background: var(--accent);
+    cursor: default;
+  }
+
+  .spinner {
+    animation: spin-stroke 1s linear infinite;
+    transform-origin: center;
+  }
+
+  @keyframes spin-stroke {
+    from {
+      stroke-dashoffset: 37.7;
+    }
+    to {
+      stroke-dashoffset: 0;
+    }
+  }
+
+  /* Bottom controls */
+  .bottom-controls {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    padding-top: 8px;
+  }
+
+  .control-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 6px;
+    color: var(--text-secondary);
+    font-size: 0.6875rem;
+    font-weight: 400;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    flex-shrink: 0;
+  }
+
+  .control-btn:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  .control-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  .control-btn.active {
+    background: var(--accent);
+    border-color: transparent;
+    color: var(--text-primary);
+  }
+
+  .control-btn.active:hover:not(:disabled) {
+    background: var(--accent);
+    opacity: 0.85;
+  }
+
+  .scope-label {
+    flex: 1;
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.5);
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* Sources section */
+  .sources-section {
+    margin-top: 12px;
+    padding: 12px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 6px;
   }
 
   .sources-title {
     font-size: 12px;
-    font-weight: 500;
+    font-weight: 600;
     color: var(--text-secondary);
-    margin-bottom: 6px;
+    margin-bottom: 8px;
   }
 
   .sources-list {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 6px;
   }
 
   .source-item {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    gap: 8px;
     padding: 6px 10px;
-    background: var(--bg-elevated);
+    background: var(--bg-primary);
     border: 1px solid var(--border);
     border-radius: 4px;
-    color: var(--text-primary);
     font-size: 12px;
+    transition: background 0.15s ease;
     cursor: pointer;
-    transition: all 0.15s ease;
   }
 
   .source-item:hover {
     background: var(--bg-hover);
-    border-color: var(--accent);
   }
 
   .source-name {
     flex: 1;
-    text-align: left;
+    min-width: 0;
+    color: var(--text-primary);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -369,155 +501,8 @@
   .source-relevance {
     flex-shrink: 0;
     font-size: 11px;
-    color: var(--accent);
-    margin-left: 8px;
-  }
-
-  .loading-indicator {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 12px;
     color: var(--text-muted);
-    font-size: 13px;
-  }
-
-  .loading-spinner {
-    width: 16px;
-    height: 16px;
-    border: 2px solid var(--text-muted);
-    border-top-color: transparent;
-    border-radius: 50%;
-    animation: spin 0.6s linear infinite;
-  }
-
-  @keyframes spin {
-    to {
-      transform: rotate(360deg);
-    }
-  }
-
-  .search-input-container {
-    display: flex;
-    gap: 8px;
-    padding: 12px;
-    border-top: 1px solid var(--border);
-  }
-
-  .search-input {
-    flex: 1;
-    padding: 10px 12px;
-    background: var(--bg-secondary);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    color: var(--text-primary);
-    font-size: 13px;
-    font-family: inherit;
-    resize: none;
-    transition: border-color 0.15s ease;
-  }
-
-  .search-input:focus {
-    outline: none;
-    border-color: var(--accent);
-  }
-
-  .search-input:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-  }
-
-  .search-btn {
-    padding: 10px 16px;
-    background: var(--accent);
-    border: none;
-    border-radius: 6px;
-    color: #fff;
-    font-size: 16px;
-    cursor: pointer;
-    transition: all 0.15s ease;
-  }
-
-  .search-btn:hover:not(:disabled) {
-    background: var(--accent-hover);
-  }
-
-  .search-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  .search-icon {
-    display: block;
-  }
-
-  .search-icon.spinning {
-    animation: spin 1s linear infinite;
-  }
-
-  @keyframes spin {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
-  }
-
-  .chat-message {
-    display: flex;
-    margin-bottom: 14px;
-    animation: fadeIn 0.15s ease;
-  }
-
-  @keyframes fadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
-  }
-
-  .chat-message.user {
-    justify-content: flex-end;
-  }
-
-  .chat-message.assistant {
-    justify-content: flex-start;
-  }
-
-  .message-content {
-    max-width: 85%;
-    padding: 8px 12px;
-    font-size: 12px;
-    line-height: 1.6;
-    color: var(--text-primary);
-    word-wrap: break-word;
-  }
-
-  .chat-message.user .message-content {
-    background: var(--bg-elevated);
-    border-radius: 12px 12px 2px 12px;
-  }
-
-  .chat-message.assistant .message-content {
-    background: transparent;
-    border-left: 2px solid var(--accent);
-    padding-left: 10px;
-  }
-
-  .message-content :global(code) {
-    background: var(--bg-elevated);
-    padding: 2px 4px;
-    border-radius: 3px;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 11px;
-  }
-
-  .message-content :global(pre) {
-    background: var(--bg-elevated);
-    padding: 10px;
-    border-radius: 4px;
-    overflow-x: auto;
-    margin: 6px 0;
-    font-size: 11px;
-  }
-
-  .message-content :global(pre code) {
-    background: none;
-    padding: 0;
+    font-weight: 500;
+    margin-right: 8px;
   }
 </style>

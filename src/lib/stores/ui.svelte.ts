@@ -8,6 +8,7 @@ class UIStore {
   viewMode = $state<ViewMode>('edit');
   sidebarView = $state<SidebarView>('notebooks');
   sidebarTab = $state<SidebarTab>('notes');
+  addSourceModalOpen = $state(false);
 
   toggleSidebar() {
     this.sidebarOpen = !this.sidebarOpen;
@@ -31,6 +32,14 @@ class UIStore {
 
   setSidebarTab(tab: SidebarTab) {
     this.sidebarTab = tab;
+  }
+
+  openAddSourceModal() {
+    this.addSourceModalOpen = true;
+  }
+
+  closeAddSourceModal() {
+    this.addSourceModalOpen = false;
   }
 }
 

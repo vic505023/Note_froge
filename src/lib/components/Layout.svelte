@@ -6,6 +6,7 @@
   import QuickOpen from './QuickOpen.svelte';
   import Settings from './Settings.svelte';
   import InputModal from './InputModal.svelte';
+  import AddSourceModal from './AddSourceModal.svelte';
   import { uiStore } from '../stores/ui.svelte';
   import { notesStore } from '../stores/notes.svelte';
   import { notebooksStore } from '../stores/notebooks.svelte';
@@ -73,6 +74,14 @@
 
     // Initialize AI store listeners
     await aiStore.init();
+
+    // Listen for new-note event from TabBar
+    function handleNewNote() {
+      if (notebooksStore.currentNotebook) {
+        createNoteModalVisible = true;
+      }
+    }
+    window.addEventListener('new-note', handleNewNote);
 
     // Global keyboard shortcuts
     function handleKeyDown(e: KeyboardEvent) {
@@ -143,6 +152,29 @@
         return;
       }
 
+      // Ctrl+W: Close tab (works everywhere)
+      if (e.ctrlKey && e.code === 'KeyW') {
+        e.preventDefault();
+        if (notesStore.activeTab) {
+          notesStore.closeTab(notesStore.activeTab);
+        }
+        return;
+      }
+
+      // Ctrl+Tab: Next tab (works everywhere)
+      if (e.ctrlKey && e.code === 'Tab' && !e.shiftKey) {
+        e.preventDefault();
+        notesStore.nextTab();
+        return;
+      }
+
+      // Ctrl+Shift+Tab: Previous tab (works everywhere)
+      if (e.ctrlKey && e.shiftKey && e.code === 'Tab') {
+        e.preventDefault();
+        notesStore.prevTab();
+        return;
+      }
+
       // Escape: Close modals
       if (e.code === 'Escape') {
         if (quickOpenVisible) {
@@ -166,6 +198,7 @@
     window.addEventListener('mouseup', handleResizeMouseUp);
 
     return () => {
+      window.removeEventListener('new-note', handleNewNote);
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('mousemove', handleResizeMouseMove);
       window.removeEventListener('mouseup', handleResizeMouseUp);
@@ -209,6 +242,11 @@
     placeholder="Note name"
     onSubmit={handleCreateNote}
   />
+
+  <!-- Add Source Modal -->
+  {#if uiStore.addSourceModalOpen}
+    <AddSourceModal onClose={() => uiStore.closeAddSourceModal()} />
+  {/if}
 </div>
 
 <style>

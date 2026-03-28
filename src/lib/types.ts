@@ -30,6 +30,7 @@ export interface AppConfig {
   agents: AIAgent[];
   active_agent_id: string | null;
   vision: VisionConfig;
+  whisper: WhisperConfig;
   editor: EditorConfig;
   ui: UIConfig;
 }
@@ -63,6 +64,13 @@ export interface VisionConfig {
   model: string;
 }
 
+export interface WhisperConfig {
+  enabled: boolean;
+  base_url: string;
+  api_key: string;
+  model: string;
+}
+
 export interface EditorConfig {
   font_size: number;
   font_family: string;
@@ -78,9 +86,18 @@ export interface UIConfig {
   selected_model: string | null;
 }
 
+export interface Source {
+  filename: string;
+  filepath: string;
+  relevance: number;
+  pages?: number[];
+  file_type?: string;
+}
+
 export interface ChatMessage {
   role: 'user' | 'assistant' | 'system';
   content: string;
+  sources?: Source[];
 }
 
 export interface SearchResult {
@@ -96,6 +113,7 @@ export interface ChatHistoryEntry {
   content: string;
   mode: string;
   created_at: number;
+  sources?: Source[];
 }
 
 export interface BacklinkResult {

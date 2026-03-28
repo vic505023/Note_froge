@@ -442,6 +442,7 @@ pub async fn ai_edit_note(
     notebook: String,
     previous_messages: Vec<ChatMessage>,
     model: Option<String>,
+    use_sources: bool,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
     let (api_key, base_url, selected_model, embedding_model) = {
@@ -470,7 +471,7 @@ pub async fn ai_edit_note(
 
     // RAG: Get sources context for editing
     let mut sources_context = String::new();
-    if !notebook.is_empty() {
+    if use_sources && !notebook.is_empty() {
         // Get embedding for instruction
         let reqwest_client = reqwest::Client::new();
 
@@ -615,7 +616,7 @@ Be concise and helpful. Respond in the same language the user writes in.
                     Note: Only sources with 30%+ relevance to the instruction are shown.",
                     sources_context
                 )
-            } else if !notebook.is_empty() {
+            } else if use_sources && !notebook.is_empty() {
                 "Note: No sources with sufficient relevance (30%+) were found for this instruction.".to_string()
             } else {
                 String::new()
@@ -652,8 +653,11 @@ The user will now give you an instruction to edit THE FILE (not the conversation
 
 EDIT RULES:
 1. ADD/INSERT instruction → Take content from conversation + add to file
-   Example: "add the table we discussed"
-   → Find table in conversation → Insert into file → Keep all original content
+   Example: "add the table we discussed" OR "добавь это в заметку" OR "add this to the note"
+   → Look at the MOST RECENT assistant message in the conversation
+   → That's what "this" or "это" refers to
+   → Insert that content into the file
+   → Keep all original content
 
 2. MODIFY instruction → Edit only the specified part
    Example: "make the introduction shorter"
@@ -668,6 +672,8 @@ EDIT RULES:
    → Clear file → Write only the requested content
 
 5. When in doubt → Minimal changes only
+
+CRITICAL: When user says "add this" or "добавь это", "this/это" means the LAST assistant response in conversation history above!
 
 PROCESS:
 - Read conversation history to find what user references ("this table", "that list", etc.)
@@ -722,6 +728,17 @@ The user will review a diff and click Apply."#,
     client.chat_complete(messages).await
 }
 
+#[derive(Serialize, Deserialize, Clone)]
+pub struct Source {
+    pub filename: String,
+    pub filepath: String,
+    pub relevance: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pages: Option<Vec<i64>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub file_type: Option<String>,
+}
+
 #[derive(Serialize, Deserialize)]
 pub struct ChatHistoryEntry {
     pub id: i64,
@@ -730,6 +747,8 @@ pub struct ChatHistoryEntry {
     pub content: String,
     pub mode: String,
     pub created_at: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sources: Option<Vec<Source>>,
 }
 
 #[tauri::command]
@@ -739,6 +758,7 @@ pub async fn save_chat_message(
     role: String,
     content: String,
     mode: String,
+    sources: Option<Vec<Source>>,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let db = state.db.lock().unwrap();
@@ -747,9 +767,14 @@ pub async fn save_chat_message(
         .unwrap()
         .as_secs() as i64;
 
+    // Serialize sources to JSON if present
+    let sources_json = sources.as_ref().map(|s| {
+        serde_json::to_string(s).unwrap_or_else(|_| "[]".to_string())
+    });
+
     db.execute(
-        "INSERT INTO chat_history (notebook, note_path, role, content, mode, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-        params![notebook, note_path, role, content, mode, now],
+        "INSERT INTO chat_history (notebook, note_path, role, content, mode, created_at, sources) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        params![notebook, note_path, role, content, mode, now, sources_json],
     )
     .map_err(|e| format!("Failed to save chat message: {}", e))?;
 
@@ -772,7 +797,7 @@ pub async fn get_chat_history(
     if let Some(path) = note_path {
         let mut stmt = db
             .prepare(
-                "SELECT id, note_path, role, content, mode, created_at
+                "SELECT id, note_path, role, content, mode, created_at, sources
                  FROM chat_history
                  WHERE notebook = ?1 AND note_path = ?2 AND mode = ?3
                  ORDER BY created_at ASC
@@ -782,6 +807,11 @@ pub async fn get_chat_history(
 
         let rows = stmt
             .query_map(params![notebook, path, mode, limit_val], |row| {
+                let sources_json: Option<String> = row.get(6)?;
+                let sources = sources_json.and_then(|json| {
+                    serde_json::from_str::<Vec<Source>>(&json).ok()
+                });
+
                 Ok(ChatHistoryEntry {
                     id: row.get(0)?,
                     note_path: row.get(1)?,
@@ -789,6 +819,7 @@ pub async fn get_chat_history(
                     content: row.get(3)?,
                     mode: row.get(4)?,
                     created_at: row.get(5)?,
+                    sources,
                 })
             })
             .map_err(|e| e.to_string())?;
@@ -799,7 +830,7 @@ pub async fn get_chat_history(
     } else {
         let mut stmt = db
             .prepare(
-                "SELECT id, note_path, role, content, mode, created_at
+                "SELECT id, note_path, role, content, mode, created_at, sources
                  FROM chat_history
                  WHERE notebook = ?1 AND note_path IS NULL AND mode = ?2
                  ORDER BY created_at ASC
@@ -809,6 +840,11 @@ pub async fn get_chat_history(
 
         let rows = stmt
             .query_map(params![notebook, mode, limit_val], |row| {
+                let sources_json: Option<String> = row.get(6)?;
+                let sources = sources_json.and_then(|json| {
+                    serde_json::from_str::<Vec<Source>>(&json).ok()
+                });
+
                 Ok(ChatHistoryEntry {
                     id: row.get(0)?,
                     note_path: row.get(1)?,
@@ -816,6 +852,7 @@ pub async fn get_chat_history(
                     content: row.get(3)?,
                     mode: row.get(4)?,
                     created_at: row.get(5)?,
+                    sources,
                 })
             })
             .map_err(|e| e.to_string())?;

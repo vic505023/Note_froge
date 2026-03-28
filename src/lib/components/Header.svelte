@@ -52,6 +52,28 @@
     notebooksStore.deselectNotebook();
     uiStore.setSidebarView('notebooks');
   }
+
+  // Tab functions
+  function handleTabClick(path: string) {
+    notesStore.switchTab(path);
+  }
+
+  function handleCloseTab(event: MouseEvent, path: string) {
+    event.stopPropagation();
+    notesStore.closeTab(path);
+  }
+
+  function handleMiddleClick(event: MouseEvent, path: string) {
+    if (event.button === 1) {
+      event.preventDefault();
+      notesStore.closeTab(path);
+    }
+  }
+
+  function handleNewTab() {
+    // Open empty tab
+    notesStore.openEmptyTab();
+  }
 </script>
 
 <header class="app-header" style="--sidebar-width: {sidebarWidth}px; --ai-width: {aiPanelWidth}px">
@@ -96,24 +118,56 @@
     {/if}
   </div>
 
-  <!-- Editor section -->
-  <div class="header-section editor-section">
-    {#if notesStore.currentFile}
-      <div class="editor-left"></div>
-      <div class="current-file">
-        <span class="file-name">{notesStore.currentFile.split('/').pop()}</span>
-      </div>
-      <div class="editor-right">
-        <button
-          class="mode-switch-btn"
-          onclick={() => uiStore.cycleViewMode()}
-          title="Switch to {uiStore.viewMode === 'edit' ? 'Preview' : 'Edit'} mode"
+  <!-- Tabs section -->
+  <div class="header-section tabs-section">
+    {#each notesStore.tabs as tab (tab.path)}
+      <button
+        class="tab"
+        class:active={tab.path === notesStore.activeTab}
+        onclick={() => handleTabClick(tab.path)}
+        onmousedown={(e) => handleMiddleClick(e, tab.path)}
+        title={tab.path}
+      >
+        <span class="tab-name">{tab.name}</span>
+        {#if tab.modified}
+          <span class="modified-dot"></span>
+        {/if}
+        <span
+          class="close-btn"
+          onclick={(e) => handleCloseTab(e, tab.path)}
+          role="button"
+          tabindex="0"
+          title="Close"
         >
-          {uiStore.viewMode === 'edit' ? 'Preview' : 'Edit'}
-        </button>
-      </div>
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+            <path d="M1 1L9 9M9 1L1 9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+        </span>
+      </button>
+    {/each}
+
+    <!-- New tab button -->
+    {#if notesStore.tabs.length > 0}
+      <button class="new-tab-btn" onclick={handleNewTab} title="New tab">
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+          <path d="M6 1V11M1 6H11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+      </button>
     {/if}
   </div>
+
+  <!-- Editor controls -->
+  {#if notesStore.currentFile}
+    <div class="header-section editor-controls">
+      <button
+        class="mode-switch-btn"
+        onclick={() => uiStore.cycleViewMode()}
+        title="Switch to {uiStore.viewMode === 'edit' ? 'Preview' : 'Edit'} mode"
+      >
+        {uiStore.viewMode === 'edit' ? 'Edit' : 'Preview'}
+      </button>
+    </div>
+  {/if}
 
   <!-- AI Panel section -->
   <div class="header-section ai-section" class:open={uiStore.aiPanelOpen}>
@@ -153,12 +207,14 @@
 <style>
   .app-header {
     display: flex;
+    align-items: flex-end;
     height: 44px;
     background: var(--bg-secondary);
     flex-shrink: 0;
     position: relative;
   }
 
+  /* Border line with gap for active tab */
   .app-header::after {
     content: '';
     position: absolute;
@@ -166,50 +222,39 @@
     left: 0;
     right: 0;
     height: 1px;
-    background: var(--border-subtle);
+    background: var(--border);
+    z-index: 0;
   }
 
   .header-section {
     display: flex;
     align-items: center;
     gap: 8px;
+    height: 100%;
   }
 
   /* Sidebar section */
   .sidebar-section {
     justify-content: space-between;
     padding: 0 14px;
+    align-items: center;
   }
 
   .sidebar-section.open {
     width: var(--sidebar-width);
-  }
-
-  /* Editor section */
-  .editor-section {
-    flex: 1;
-    display: grid;
-    grid-template-columns: 1fr auto 1fr;
-    align-items: center;
-  }
-
-  .editor-left {
-    /* Пустая колонка слева для баланса */
-  }
-
-  .editor-right {
-    display: flex;
-    justify-content: flex-end;
-    padding-right: 0;
+    border-right: 1px solid var(--border-subtle);
   }
 
   /* AI section */
   .ai-section {
     justify-content: space-between;
+    align-items: center;
   }
 
   .ai-section.open {
     width: var(--ai-width);
+    padding: 0 14px;
+    border-left: 1px solid var(--border-subtle);
   }
 
   /* When panels are closed */
@@ -273,23 +318,6 @@
     opacity: 1;
   }
 
-  /* Current file display - pill style */
-  .current-file {
-    display: flex;
-    align-items: center;
-    background: rgba(255, 255, 255, 0.06);
-    border-radius: 6px;
-    padding: 4px 12px;
-  }
-
-  .file-name {
-    font-size: 0.75rem;
-    font-weight: 400;
-    color: var(--text-primary);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
 
   /* Mode switch button */
   .mode-switch-btn {
@@ -311,5 +339,167 @@
 
   .mode-switch-btn:active {
     opacity: 1;
+  }
+
+  /* Tabs section */
+  .tabs-section {
+    flex: 1;
+    display: flex;
+    align-items: flex-end;
+    gap: 2px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    padding: 0 8px;
+  }
+
+  .tabs-section::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Tab styling */
+  .tab {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    padding: 8px 14px;
+    background: transparent;
+    border: none;
+    border-radius: 6px 6px 0 0;
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 150ms ease;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  /* Separator between non-active tabs */
+  .tab:not(.active)::after {
+    content: '';
+    position: absolute;
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    height: 16px;
+    width: 1px;
+    background: var(--border);
+    opacity: 0.4;
+  }
+
+  /* Hide separator if next tab is active or if it's the last tab */
+  .tab:not(.active):last-child::after,
+  .tab:not(.active):has(+ .tab.active)::after {
+    display: none;
+  }
+
+  .tab:hover:not(.active) {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+  }
+
+  .tab.active {
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    z-index: 1;
+    position: relative;
+    bottom: -1px;
+    padding-bottom: 9px;
+  }
+
+  .tab-name {
+    max-width: 140px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-weight: 400;
+  }
+
+  .tab.active .tab-name {
+    font-weight: 500;
+  }
+
+  .modified-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--text-muted);
+    flex-shrink: 0;
+    margin-left: -4px;
+    transition: background 150ms ease;
+  }
+
+  .tab.active .modified-dot {
+    background: var(--accent);
+  }
+
+  .close-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    padding: 0;
+    background: none;
+    border: none;
+    border-radius: 3px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    opacity: 0.8;
+    transition: all 150ms ease;
+    flex-shrink: 0;
+  }
+
+  .tab:hover .close-btn {
+    opacity: 1;
+  }
+
+  .close-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+  }
+
+  .tab.active .close-btn {
+    color: var(--text-secondary);
+  }
+
+  .tab.active:hover .close-btn {
+    opacity: 1;
+  }
+
+  .tab.active .close-btn:hover {
+    background: var(--bg-elevated);
+    color: var(--text-primary);
+  }
+
+  .new-tab-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    margin-bottom: 3px;
+    background: transparent;
+    border: none;
+    border-radius: 4px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 150ms ease;
+    flex-shrink: 0;
+    margin-left: 4px;
+  }
+
+  .new-tab-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+  }
+
+  /* Editor controls */
+  .editor-controls {
+    padding: 0 8px;
+    align-items: center;
   }
 </style>

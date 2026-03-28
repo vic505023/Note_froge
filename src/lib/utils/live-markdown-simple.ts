@@ -241,8 +241,40 @@ function buildDecorations(view: EditorView): DecorationSet {
         continue;
       }
 
+
+      // Цитаты: > text
+      const quoteMatch = text.match(/^(>\s*)(.*)/);
+      let isQuoteLine = false;
+      let quoteMarkerLen = 0;
+      if (quoteMatch) {
+        isQuoteLine = true;
+        quoteMarkerLen = quoteMatch[1].length;
+
+        // Добавляем line decoration для border (применяется ко всей строке)
+        builder.add(
+          line.from,
+          line.from,
+          Decoration.line({
+            attributes: {
+              style: 'border-left: 3px solid var(--accent); padding-left: 12px;'
+            }
+          })
+        );
+
+        // Скрываем "> " если не активная строка
+        if (!isActiveLine) {
+          builder.add(
+            line.from,
+            line.from + quoteMarkerLen,
+            Decoration.replace({})
+          );
+        }
+
+        // НЕ добавляем mark decoration здесь - это будет сделано в inline форматировании
+      }
+
       // Task list items: - [ ] или - [x]
-      const taskMatch = text.match(/^(\s*)- \[([ x])\] /i);
+      const taskMatch = !isQuoteLine ? text.match(/^(\s*)- \[([ x])\] /i) : null;
       if (taskMatch) {
         const indent = taskMatch[1].length;
         const checked = taskMatch[2].toLowerCase() === 'x';
@@ -269,7 +301,7 @@ function buildDecorations(view: EditorView): DecorationSet {
       }
 
       // Обычные списки: -
-      const listMatch = text.match(/^(\s*)([-*])\s/);
+      const listMatch = !isQuoteLine ? text.match(/^(\s*)([-*])\s/) : null;
       if (listMatch) {
         const indent = listMatch[1].length;
         const markerStart = line.from + indent;
@@ -304,6 +336,10 @@ function buildDecorations(view: EditorView): DecorationSet {
       while ((match = boldRegex.exec(text)) !== null) {
         const startPos = line.from + match.index;
         const endPos = startPos + match[0].length;
+
+        // Пропускаем если внутри маркера цитаты
+        if (isQuoteLine && match.index < quoteMarkerLen) continue;
+
         // Показываем маркеры если: идет выделение ИЛИ курсор в области форматирования
         const showMarkers = isSelecting || (cursor >= startPos && cursor <= endPos);
 
@@ -322,21 +358,28 @@ function buildDecorations(view: EditorView): DecorationSet {
           });
         }
 
-        // Делаем текст жирным
+        // Делаем текст жирным (+ цвет цитаты если в цитате)
+        const style = isQuoteLine
+          ? 'font-weight: 700; color: var(--text-secondary);'
+          : 'font-weight: 700;';
         decoSpecs.push({
           from: startPos + 2,
           to: endPos - 2,
           decoration: Decoration.mark({
-            attributes: { style: 'font-weight: 700;' }
+            attributes: { style }
           })
         });
       }
 
-      // `code`
-      const codeRegex = /`([^`]+)`/g;
-      while ((match = codeRegex.exec(text)) !== null) {
+      // *italic*
+      const italicRegex = /(?<!\*)\*(?!\*)([^\*]+)\*(?!\*)/g;
+      while ((match = italicRegex.exec(text)) !== null) {
         const startPos = line.from + match.index;
         const endPos = startPos + match[0].length;
+
+        // Пропускаем если внутри маркера цитаты
+        if (isQuoteLine && match.index < quoteMarkerLen) continue;
+
         // Показываем маркеры если: идет выделение ИЛИ курсор в области форматирования
         const showMarkers = isSelecting || (cursor >= startPos && cursor <= endPos);
 
@@ -355,17 +398,73 @@ function buildDecorations(view: EditorView): DecorationSet {
           });
         }
 
-        // Форматируем код
+        // Делаем текст курсивом (+ цвет цитаты если в цитате)
+        const style = isQuoteLine
+          ? 'font-style: italic; color: var(--text-secondary);'
+          : 'font-style: italic;';
         decoSpecs.push({
           from: startPos + 1,
           to: endPos - 1,
           decoration: Decoration.mark({
-            attributes: { style: 'font-family: "JetBrains Mono", monospace; background: rgba(255,255,255,0.1); padding: 2px 4px; border-radius: 3px;' }
+            attributes: { style }
           })
         });
       }
 
-      decoSpecs.sort((a, b) => a.from - b.from);
+      // `code`
+      const codeRegex = /`([^`]+)`/g;
+      while ((match = codeRegex.exec(text)) !== null) {
+        const startPos = line.from + match.index;
+        const endPos = startPos + match[0].length;
+
+        // Пропускаем если внутри маркера цитаты
+        if (isQuoteLine && match.index < quoteMarkerLen) continue;
+
+        // Показываем маркеры если: идет выделение ИЛИ курсор в области форматирования
+        const showMarkers = isSelecting || (cursor >= startPos && cursor <= endPos);
+
+        if (!showMarkers) {
+          // Используем replace чтобы полностью удалить маркеры
+          decoSpecs.push({
+            from: startPos,
+            to: startPos + 1,
+            decoration: Decoration.replace({})
+          });
+
+          decoSpecs.push({
+            from: endPos - 1,
+            to: endPos,
+            decoration: Decoration.replace({})
+          });
+        }
+
+        // Форматируем код (+ цвет цитаты если в цитате)
+        const style = isQuoteLine
+          ? 'font-family: "JetBrains Mono", monospace; background: rgba(255,255,255,0.1); padding: 2px 4px; border-radius: 3px; color: var(--text-secondary);'
+          : 'font-family: "JetBrains Mono", monospace; background: rgba(255,255,255,0.1); padding: 2px 4px; border-radius: 3px;';
+        decoSpecs.push({
+          from: startPos + 1,
+          to: endPos - 1,
+          decoration: Decoration.mark({
+            attributes: { style }
+          })
+        });
+      }
+
+      // Если это цитата, добавляем базовый цвет для текста без форматирования
+      if (isQuoteLine && quoteMarkerLen > 0) {
+        // Добавляем декорацию для всего текста после маркера с низким приоритетом
+        // (она будет перекрыта inline форматированием)
+        decoSpecs.push({
+          from: line.from + quoteMarkerLen,
+          to: line.to,
+          decoration: Decoration.mark({
+            attributes: { style: 'color: var(--text-secondary);' }
+          })
+        });
+      }
+
+      decoSpecs.sort((a, b) => a.from - b.from || (a.to - a.from) - (b.to - b.from));
       for (const spec of decoSpecs) {
         builder.add(spec.from, spec.to, spec.decoration);
       }
@@ -422,6 +521,35 @@ const clickHandler = EditorView.updateListener.of((update) => {
       newPos = line.from + matchEnd;
       needsCorrection = true;
       break;
+    }
+  }
+
+  // Проверяем italic: *текст*
+  if (!needsCorrection) {
+    const italicRegex = /(?<!\*)\*(?!\*)([^\*]+)\*(?!\*)/g;
+    while ((match = italicRegex.exec(text)) !== null) {
+      const matchStart = match.index;
+      const matchEnd = matchStart + match[0].length;
+      const contentStart = matchStart + 1;
+      const contentEnd = matchEnd - 1;
+
+      console.log('[Live MD] Found italic:', match[0], 'at', matchStart, '-', matchEnd);
+
+      // Курсор попал на открывающий * → сдвигаем после него
+      if (offset > matchStart && offset < contentStart) {
+        console.log('[Live MD] Cursor on opening *, correcting to', contentStart);
+        newPos = line.from + contentStart;
+        needsCorrection = true;
+        break;
+      }
+
+      // Курсор попал внутри закрывающего * → сдвигаем за него
+      if (offset > contentEnd && offset <= matchEnd) {
+        console.log('[Live MD] Cursor inside closing *, correcting to', matchEnd);
+        newPos = line.from + matchEnd;
+        needsCorrection = true;
+        break;
+      }
     }
   }
 

@@ -165,14 +165,14 @@ impl AiClient {
             .post(&url)
             .header("Authorization", format!("Bearer {}", self.api_key))
             .header("Content-Type", "application/json")
-            .timeout(Duration::from_secs(60))
+            .timeout(Duration::from_secs(180))
             .json(&request_body)
             .send()
             .await
             .map_err(|e| {
                 eprintln!("HTTP request failed (chat_complete). URL: {}, Error: {:?}", url, e);
                 if e.is_timeout() {
-                    format!("Request timeout (60s). Check your internet connection.")
+                    format!("Request timeout (180s). Check your internet connection or try again.")
                 } else if e.is_connect() {
                     format!("Connection failed. Cannot reach {}", url)
                 } else {

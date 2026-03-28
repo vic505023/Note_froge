@@ -1,7 +1,9 @@
 use crate::services::indexer;
+use crate::services::watcher;
 use crate::state::AppState;
 use std::fs;
 use std::path::PathBuf;
+use std::sync::Arc;
 use tauri::{AppHandle, Emitter, State};
 
 #[tauri::command]
@@ -110,6 +112,10 @@ pub async fn vault_init(
         count == 0
     };
 
+    // Clone app_handle before using it in closures
+    let app_handle_for_indexing = app_handle.clone();
+    let app_handle_for_watcher = app_handle.clone();
+
     // Run initial indexing if database is empty
     if needs_indexing {
         app_handle
@@ -124,18 +130,32 @@ pub async fn vault_init(
             let db = state_clone.db.lock().unwrap();
             match indexer::reindex_vault(&db, &vault_path_clone) {
                 Ok(count) => {
-                    app_handle
+                    app_handle_for_indexing
                         .emit("indexing-complete", serde_json::json!({ "count": count }))
                         .ok();
                 }
                 Err(e) => {
-                    app_handle
+                    app_handle_for_indexing
                         .emit("indexing-error", serde_json::json!({ "error": e.to_string() }))
                         .ok();
                 }
             }
         });
     }
+
+    // Start file watcher
+    let state_arc = Arc::new(state.inner().clone());
+    let vault_path_for_watcher = vault_path.clone();
+
+    std::thread::spawn(move || {
+        if let Err(e) = watcher::start_watcher(
+            vault_path_for_watcher,
+            app_handle_for_watcher,
+            state_arc,
+        ) {
+            eprintln!("Failed to start file watcher: {}", e);
+        }
+    });
 
     Ok(path)
 }

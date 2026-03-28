@@ -1,51 +1,16 @@
 <script lang="ts">
   import { documentsStore } from '../stores/documents.svelte';
   import { notebooksStore } from '../stores/notebooks.svelte';
-  import { open, ask } from '@tauri-apps/plugin-dialog';
+  import { uiStore } from '../stores/ui.svelte';
+  import { ask } from '@tauri-apps/plugin-dialog';
   import type { DocumentInfo } from '../types';
 
   let selectedDoc = $state<DocumentInfo | null>(null);
   let showContextMenu = $state(false);
   let contextMenuX = $state(0);
   let contextMenuY = $state(0);
-
-  async function uploadDocument() {
-    try {
-      const selected = await open({
-        multiple: false,
-        filters: [
-          {
-            name: 'PDF Documents',
-            extensions: ['pdf']
-          },
-          {
-            name: 'Word Documents',
-            extensions: ['docx']
-          },
-          {
-            name: 'PowerPoint Presentations',
-            extensions: ['pptx']
-          },
-          {
-            name: 'Text Files',
-            extensions: ['txt']
-          },
-          {
-            name: 'All Supported',
-            extensions: ['pdf', 'docx', 'pptx', 'txt']
-          }
-        ]
-      });
-
-      if (selected && notebooksStore.currentNotebook) {
-        // selected is already a string path, not an object
-        await documentsStore.upload(selected, notebooksStore.currentNotebook);
-      }
-    } catch (err) {
-      console.error('Failed to upload document:', err);
-      alert('Failed to upload document: ' + err);
-    }
-  }
+  let isDragging = $state(false);
+  let dragCounter = $state(0);
 
   async function deleteDocument(doc: DocumentInfo) {
     console.log('🔵 deleteDocument STARTED for:', doc.filename, 'id:', doc.id);
@@ -111,12 +76,86 @@
     }
   }
 
-  function getFileIcon() {
-    return `<svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-      <path d="M14 2H6C5.46957 2 4.96086 2.21071 4.58579 2.58579C4.21071 2.96086 4 3.46957 4 4V20C4 20.5304 4.21071 21.0391 4.58579 21.4142C4.96086 21.7893 5.46957 22 6 22H18C18.5304 22 19.0391 21.7893 19.4142 21.4142C19.7893 21.0391 20 20.5304 20 20V8L14 2Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-      <path d="M14 2V8H20" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-      <path d="M8 13H16M8 16H16" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
-    </svg>`;
+  function getFileIconType(doc: DocumentInfo): 'youtube' | 'web' | 'file' {
+    // YouTube videos
+    if (doc.filename.startsWith('YouTube:')) {
+      return 'youtube';
+    }
+    // Web URLs
+    if (doc.filename.startsWith('http://') || doc.filename.startsWith('https://')) {
+      return 'web';
+    }
+    // Regular files and text snippets
+    return 'file';
+  }
+
+  // Drag & Drop handlers
+  function handleDragEnter(e: DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter++;
+    if (dragCounter === 1) {
+      isDragging = true;
+    }
+  }
+
+  function handleDragOver(e: DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+  }
+
+  function handleDragLeave(e: DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter--;
+    if (dragCounter === 0) {
+      isDragging = false;
+    }
+  }
+
+  async function handleDrop(e: DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    isDragging = false;
+    dragCounter = 0;
+
+    const files = e.dataTransfer?.files;
+    if (!files || files.length === 0) return;
+
+    const notebook = notebooksStore.currentNotebook;
+    if (!notebook) {
+      alert('Please select a notebook first');
+      return;
+    }
+
+    const supportedExtensions = ['.pdf', '.docx', '.pptx', '.txt'];
+    const validFiles: File[] = [];
+    const invalidFiles: string[] = [];
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const ext = file.name.toLowerCase().substring(file.name.lastIndexOf('.'));
+
+      if (supportedExtensions.includes(ext)) {
+        validFiles.push(file);
+      } else {
+        invalidFiles.push(file.name);
+      }
+    }
+
+    if (invalidFiles.length > 0) {
+      alert(`Unsupported file types:\n${invalidFiles.join('\n')}\n\nSupported: PDF, DOCX, PPTX, TXT`);
+    }
+
+    // Upload valid files
+    for (const file of validFiles) {
+      try {
+        await documentsStore.upload(file.path, notebook);
+      } catch (err) {
+        console.error('Failed to upload file:', file.name, err);
+        alert(`Failed to upload ${file.name}: ${err}`);
+      }
+    }
   }
 </script>
 
@@ -124,28 +163,42 @@
 
 <div class="sources-list">
   <div class="upload-section">
-    <button class="upload-btn" onclick={uploadDocument}>
+    <button class="upload-btn" onclick={() => uiStore.openAddSourceModal()}>
       <span class="upload-icon">+</span>
-      Upload source
+      Add source
     </button>
   </div>
 
-  <div class="documents-container">
+  <div
+    class="documents-container"
+    class:dragging={isDragging}
+    ondragenter={handleDragEnter}
+    ondragover={handleDragOver}
+    ondragleave={handleDragLeave}
+    ondrop={handleDrop}
+  >
+    {#if isDragging}
+      <div class="drop-overlay">
+        <div class="drop-icon">📁</div>
+        <div class="drop-text">Drop files to upload</div>
+        <div class="drop-hint">PDF, DOCX, PPTX, TXT</div>
+      </div>
+    {/if}
+
     {#if documentsStore.isLoading}
       <div class="loading">Loading sources...</div>
     {:else if documentsStore.error}
       <div class="error">{documentsStore.error}</div>
     {:else if documentsStore.documents.length === 0}
       <div class="empty-state">
-        <div class="empty-icon">
-          <svg width="48" height="48" viewBox="0 0 24 24" fill="none">
-            <path d="M4 19.5C4 18.837 4.26339 18.2011 4.73223 17.7322C5.20107 17.2634 5.83696 17 6.5 17H20" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-            <path d="M6.5 2H20V22H6.5C5.83696 22 5.20107 21.7366 4.73223 21.2678C4.26339 20.7989 4 20.163 4 19.5V4.5C4 3.83696 4.26339 3.20107 4.73223 2.73223C5.20107 2.26339 5.83696 2 6.5 2Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-            <path d="M8 6H16M8 10H16M8 14H12" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
-          </svg>
-        </div>
+        <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+          <circle cx="24" cy="24" r="22" stroke="currentColor" stroke-width="2" opacity="0.1"/>
+          <path d="M18 28C18 27.448 18.224 26.92 18.624 26.52C19.024 26.12 19.552 25.9 20.1 25.9H30" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M20.1 16H30V32H20.1C19.552 32 19.024 31.78 18.624 31.38C18.224 30.98 18 30.452 18 29.9V18.1C18 17.548 18.224 17.02 18.624 16.62C19.024 16.22 19.552 16 20.1 16Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M21 19H28M21 22H28M21 25H25" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+        </svg>
         <div class="empty-text">No sources yet</div>
-        <div class="empty-hint">Upload PDF, DOCX, PPTX, or TXT files</div>
+        <div class="empty-hint">Drop files here or click "Add source"</div>
       </div>
     {:else}
       {#each documentsStore.documents as doc (doc.id)}
@@ -154,7 +207,27 @@
           oncontextmenu={(e) => showDocContextMenu(doc, e)}
         >
           <div class="doc-icon">
-            {@html getFileIcon()}
+            {#if getFileIconType(doc) === 'youtube'}
+              <!-- YouTube icon - play button style -->
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                <rect x="2" y="4" width="16" height="12" rx="2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M8 7L13 10L8 13V7Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            {:else if getFileIconType(doc) === 'web'}
+              <!-- Link icon - chain style -->
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                <path d="M9 6L6.5 8.5C5.5 9.5 5.5 11 6.5 12C7.5 13 9 13 10 12L11.5 10.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M11 14L13.5 11.5C14.5 10.5 14.5 9 13.5 8C12.5 7 11 7 10 8L8.5 9.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                <circle cx="10" cy="10" r="8" stroke="currentColor" stroke-width="1.5"/>
+              </svg>
+            {:else}
+              <!-- File icon - document style -->
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                <path d="M12 2H5C4.44772 2 4 2.44772 4 3V17C4 17.5523 4.44772 18 5 18H15C15.5523 18 16 17.5523 16 17V6L12 2Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M12 2V6H16" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M7 10H13M7 13H13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              </svg>
+            {/if}
           </div>
           <div class="doc-info">
             <div class="doc-name" title={doc.title}>
@@ -322,6 +395,50 @@
     flex: 1;
     overflow-y: auto;
     padding: 4px;
+    position: relative;
+    transition: background 0.2s ease;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .documents-container.dragging {
+    background: rgba(122, 162, 247, 0.05);
+  }
+
+  .drop-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: rgba(26, 27, 38, 0.95);
+    border: 2px dashed var(--accent);
+    border-radius: 8px;
+    margin: 8px;
+    z-index: 10;
+    pointer-events: none;
+  }
+
+  .drop-icon {
+    font-size: 64px;
+    margin-bottom: 16px;
+    opacity: 0.8;
+  }
+
+  .drop-text {
+    font-size: 16px;
+    font-weight: 500;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+  }
+
+  .drop-hint {
+    font-size: 12px;
+    color: var(--text-muted);
   }
 
   .loading,
@@ -331,21 +448,21 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
+    flex: 1;
     padding: 40px 20px;
     text-align: center;
     color: var(--text-muted);
     font-size: 13px;
+    margin-top: -80px;
   }
 
   .error {
     color: var(--error);
   }
 
-  .empty-icon {
-    font-size: 48px;
-    margin-bottom: 12px;
-    opacity: 0.3;
-    filter: grayscale(1);
+  .empty-state svg {
+    margin-bottom: 16px;
+    opacity: 0.6;
   }
 
   .empty-text {
@@ -379,7 +496,14 @@
     flex-shrink: 0;
     width: 24px;
     height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     color: var(--text-secondary);
+  }
+
+  .doc-icon svg {
+    opacity: 0.7;
   }
 
   .doc-info {

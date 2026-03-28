@@ -152,11 +152,18 @@
   .cancel-btn {
     background: transparent;
     color: var(--text-secondary);
+    border: 1px solid var(--border);
   }
 
   .cancel-btn:hover {
     background: var(--bg-hover);
     color: var(--text-primary);
+    border-color: var(--error);
+  }
+
+  .cancel-btn:active {
+    background: var(--error);
+    color: #fff;
   }
 
   .submit-btn {

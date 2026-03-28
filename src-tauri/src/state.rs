@@ -21,6 +21,8 @@ pub struct AppConfig {
     pub active_agent_id: Option<String>,
     #[serde(default)]
     pub vision: VisionConfig,
+    #[serde(default)]
+    pub whisper: WhisperConfig,
     pub editor: EditorConfig,
     pub ui: UIConfig,
 }
@@ -92,6 +94,29 @@ impl Default for VisionConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WhisperConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default)]
+    pub base_url: String, // Empty = use main AI base_url
+    #[serde(default)]
+    pub api_key: String, // Empty = use main AI api_key
+    #[serde(default = "default_whisper_model")]
+    pub model: String,
+}
+
+impl Default for WhisperConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            base_url: String::new(),
+            api_key: String::new(),
+            model: default_whisper_model(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EditorConfig {
     #[serde(default = "default_font_size")]
     pub font_size: u32,
@@ -137,6 +162,10 @@ fn default_vision_model() -> String {
     "openai/gpt-4o-mini".to_string()
 }
 
+fn default_whisper_model() -> String {
+    "whisper-1".to_string()
+}
+
 fn default_font_size() -> u32 {
     14
 }
@@ -178,6 +207,7 @@ impl Default for AppConfig {
             agents: vec![],
             active_agent_id: None,
             vision: VisionConfig::default(),
+            whisper: WhisperConfig::default(),
             editor: EditorConfig {
                 font_size: default_font_size(),
                 font_family: default_font_family(),
@@ -267,6 +297,26 @@ impl AppConfig {
     pub fn get_vision_api_key(&self) -> String {
         if !self.vision.api_key.is_empty() {
             self.vision.api_key.clone()
+        } else {
+            let agent = self.get_active_agent_or_legacy();
+            agent.api_key
+        }
+    }
+
+    /// Get whisper base URL (uses separate URL if set, otherwise falls back to active agent)
+    pub fn get_whisper_base_url(&self) -> String {
+        if !self.whisper.base_url.is_empty() {
+            self.whisper.base_url.clone()
+        } else {
+            let agent = self.get_active_agent_or_legacy();
+            agent.base_url
+        }
+    }
+
+    /// Get whisper API key (uses separate key if set, otherwise falls back to active agent)
+    pub fn get_whisper_api_key(&self) -> String {
+        if !self.whisper.api_key.is_empty() {
+            self.whisper.api_key.clone()
         } else {
             let agent = self.get_active_agent_or_legacy();
             agent.api_key
